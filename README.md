@@ -6,6 +6,7 @@ A private bulk-email sender. One admin signs in, writes one email, pastes a list
 - A background worker sends one at a time, waits between emails, takes breaks, and stops at the daily limit. Leftovers continue the next morning.
 - Every email carries an unsubscribe link and one-click unsubscribe headers (what Gmail and Yahoo expect on bulk mail).
 - Unsubscribed and bounced addresses go on a do-not-email list and are skipped in every batch.
+- Up to 3 attachments per email (PDF, images, Word, Excel, PowerPoint, CSV, text), 5 MB in total, stored on the same volume as the database. Unused uploads are cleaned up after a day.
 - The SMTP password lives only in `.env` on the server, never in the page or the database.
 
 ## Status

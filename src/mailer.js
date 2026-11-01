@@ -47,7 +47,8 @@ const api = {
       return postJson("https://api.resend.com/emails", { Authorization: "Bearer " + config.resendKey }, {
         from: from.name ? `${from.name.replace(/["<>]/g, "")} <${from.email}>` : from.email,
         to: [to.name ? `${to.name.replace(/["<>]/g, "")} <${to.email}>` : to.email],
-        subject: m.subject, text: m.text, html: m.html, headers: m.headers
+        subject: m.subject, text: m.text, html: m.html, headers: m.headers,
+        attachments: m.attachments ? m.attachments.map((a) => ({ filename: a.filename, content: a.content.toString("base64") })) : undefined
       });
     },
     async verify() {
@@ -64,7 +65,8 @@ const api = {
       return postJson("https://api.brevo.com/v3/smtp/email", { "api-key": config.brevoKey }, {
         sender: { email: from.email, name: from.name || undefined },
         to: [{ email: to.email, name: to.name || undefined }],
-        subject: m.subject, textContent: m.text, htmlContent: m.html, headers: m.headers
+        subject: m.subject, textContent: m.text, htmlContent: m.html, headers: m.headers,
+        attachment: m.attachments ? m.attachments.map((a) => ({ name: a.filename, content: a.content.toString("base64") })) : undefined
       });
     },
     async verify() {
@@ -100,7 +102,8 @@ function textToHtml(text) {
 }
 
 /** Builds one personalised message. */
-function buildMessage({ subject, body, fromName, fromEmail }, recipient, settings) {
+/** files: optional [{ filename, contentType, content: Buffer }] from attachments.load(). */
+function buildMessage({ subject, body, fromName, fromEmail }, recipient, settings, files) {
   const name = recipient.name || "";
   const unsubUrl = unsubscribeUrl(recipient.email);
   const subj = personalize(subject, name).replace(/[\r\n]+/g, " ");
@@ -128,6 +131,7 @@ function buildMessage({ subject, body, fromName, fromEmail }, recipient, setting
     subject: subj,
     text,
     html,
+    attachments: files && files.length ? files : undefined,
     headers: {
       // One-click unsubscribe (RFC 8058); Gmail and Yahoo expect this on bulk mail.
       "List-Unsubscribe": "<" + unsubUrl + ">",

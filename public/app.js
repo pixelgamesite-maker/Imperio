@@ -269,13 +269,77 @@
   function personalize(text, name) { return String(text).replace(/\{name\}/gi, name && name.trim() ? name.trim() : "there"); }
 
   function message() {
-    return { fromName: $("fromName").value.trim(), fromEmail: $("fromAddr").value.trim(), subject: $("subject").value.trim(), body: $("body").value };
+    return {
+      fromName: $("fromName").value.trim(), fromEmail: $("fromAddr").value.trim(), subject: $("subject").value.trim(), body: $("body").value,
+      attachmentIds: attached.filter(function (a) { return a.id; }).map(function (a) { return a.id; })
+    };
   }
+
+  // ---------- Attachments ----------
+  var MAX_FILES = 3, MAX_TOTAL = 5 * 1024 * 1024;
+  var EXTS = ["pdf", "jpg", "jpeg", "png", "gif", "webp", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt"];
+  var attached = [];
+  try { attached = JSON.parse(storeGet("imperio-attachments", "[]")) || []; } catch (e) { attached = []; }
+
+  function fileSize(n) { return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + " KB" : (n / 1024 / 1024).toFixed(1) + " MB"; }
+  function saveAttached() { storeSet("imperio-attachments", JSON.stringify(attached.filter(function (a) { return a.id; }))); }
+
+  function renderAttached() {
+    var list = $("attachList");
+    list.hidden = attached.length === 0;
+    list.innerHTML = attached.map(function (a, i) {
+      return '<span class="attach-chip' + (a.id ? "" : " is-uploading") + '"><span class="name" title="' + esc(a.name) + '">' + esc(a.name) + '</span><span class="size">' +
+        (a.id ? fileSize(a.size) : "Uploading…") + '</span>' + (a.id ? '<button class="x" type="button" data-remove="' + i + '" aria-label="Remove ' + esc(a.name) + '">×</button>' : "") + "</span>";
+    }).join("");
+    $("attachBtn").disabled = attached.length >= MAX_FILES;
+  }
+
+  function readBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(String(r.result).split(",")[1] || ""); };
+      r.onerror = function () { reject(new Error("Couldn't read " + file.name + ".")); };
+      r.readAsDataURL(file);
+    });
+  }
+
+  function addFiles(files) {
+    files = Array.prototype.slice.call(files);
+    var total = attached.reduce(function (n, a) { return n + (a.size || 0); }, 0);
+    files.forEach(function (file) {
+      var ext = (file.name.split(".").pop() || "").toLowerCase();
+      if (attached.length >= MAX_FILES) { toast("Attach up to 3 files."); return; }
+      if (EXTS.indexOf(ext) === -1 || file.name.indexOf(".") === -1) { toast(file.name + " can't be attached. Use PDF, an image, Word, Excel or PowerPoint."); return; }
+      if (total + file.size > MAX_TOTAL) { toast("Attachments can add up to 5 MB per email. " + file.name + " is too big."); return; }
+      total += file.size;
+      var entry = { name: file.name, size: file.size };
+      attached.push(entry); renderAttached();
+      readBase64(file).then(function (data) {
+        return api("POST", "/attachments", { name: file.name, data: data });
+      }).then(function (res) {
+        Object.assign(entry, res.attachment); saveAttached(); renderAttached();
+      }, function (err) {
+        attached.splice(attached.indexOf(entry), 1); renderAttached(); toast(err.message);
+      });
+    });
+  }
+
+  $("attachBtn").addEventListener("click", function () { $("fileInput").click(); });
+  $("fileInput").addEventListener("change", function (e) { addFiles(e.target.files); e.target.value = ""; });
+  $("attachList").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-remove]");
+    if (!b) return;
+    attached.splice(+b.getAttribute("data-remove"), 1); saveAttached(); renderAttached();
+  });
+  renderAttached();
+
+  function uploading() { return attached.some(function (a) { return !a.id; }); }
 
   function messageProblem(m) {
     if (!m.subject) return { field: "subject", text: "Add a subject before sending." };
     if (!m.body.trim()) return { field: "body", text: "Write a message before sending." };
     if (!m.fromEmail) return { field: "fromAddr", text: "Add a from address." };
+    if (uploading()) return { field: "attachBtn", text: "Wait for the attachment to finish uploading." };
     return null;
   }
 
@@ -289,6 +353,7 @@
       "<div><span>To </span>" + esc(r.name ? r.name + " <" + r.email + ">" : r.email) + "</div>" +
       "<div><span>Subject </span><b>" + esc(personalize(m.subject, r.name)) + "</b></div></div>" +
       '<div class="mail-body">' + esc(personalize(m.body, r.name)) + (s.signature ? "\n\n" + esc(s.signature) : "") + "</div>" +
+      (attached.length ? '<div class="mail-files">' + attached.map(function (a) { return "<span><b>" + esc(a.name) + "</b> " + (a.size ? fileSize(a.size) : "") + "</span>"; }).join("") + "</div>" : "") +
       '<div class="mail-foot">' + unsubHTML + (s.footerAddress ? "<br>" + esc(s.footerAddress) : "") + "</div></div>";
   }
 
@@ -331,6 +396,7 @@
       '<div class="modal-body"><dl class="facts">' +
       "<dt>Subject</dt><dd>" + esc(m.subject) + "</dd>" +
       "<dt>From</dt><dd>" + esc(m.fromEmail) + "</dd>" +
+      (attached.length ? "<dt>Attached</dt><dd>" + attached.map(function (a) { return esc(a.name); }).join(", ") + "</dd>" : "") +
       "<dt>Recipients</dt><dd>" + fmt(n) + (skipped ? ' <span class="hint">(' + fmt(skipped) + " left out)</span>" : "") + "</dd>" +
       "<dt>Sent today</dt><dd>" + fmt(today) + (today ? (sendSeconds(today) < 60 ? ", in under a minute" : ", over about " + duration(sendSeconds(today))) : "") + "</dd>" +
       (later ? "<dt>Sent later</dt><dd>" + fmt(later) + " (daily limit " + fmt(w.dailyLimit) + ")</dd>" : "") +
@@ -342,7 +408,7 @@
       function (modal) {
         modal.querySelector("#confirmSend").addEventListener("click", function (e) {
           e.target.disabled = true;
-          api("POST", "/batches", { subject: m.subject, body: m.body, fromName: m.fromName, fromEmail: m.fromEmail, recipients: $("recips").value })
+          api("POST", "/batches", { subject: m.subject, body: m.body, fromName: m.fromName, fromEmail: m.fromEmail, attachmentIds: m.attachmentIds, recipients: $("recips").value })
             .then(function (data) {
               closeModal();
               $("recips").value = ""; storeSet("imperio-recips", ""); runCheck();
@@ -524,6 +590,8 @@
         (h.failed ? '<a class="btn" href="/api/batches/' + h.id + '/failed.csv" download>Download failed (CSV)</a>' : "") +
         '<button class="btn" type="button" data-retry="' + h.id + '"' + (h.failed ? "" : " disabled") + ">Retry " + fmt(h.failed) + " failed</button>" +
         "</div></div>" +
+        (openDetail && openDetail.batch.id === h.id && openDetail.batch.attachments && openDetail.batch.attachments.length
+          ? '<p class="hint">Attached: ' + openDetail.batch.attachments.map(function (a) { return esc(a.name) + " (" + fileSize(a.size) + ")"; }).join(", ") + "</p>" : "") +
         '<div class="recip-list">' + (recips.length ? recips.map(function (r) {
           var s = RSTATUS[r.status] || [r.status, "pill-neutral"];
           return '<div><span class="addr">' + esc(r.name ? r.email + " (" + r.name + ")" : r.email) + (r.error ? '<span class="why">' + esc(r.error) + "</span>" : "") + '</span><span class="pill ' + s[1] + '">' + s[0] + "</span></div>";

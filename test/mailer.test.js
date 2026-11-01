@@ -32,3 +32,12 @@ test("API errors are classified", async () => {
   global.fetch = async () => { throw new Error("getaddrinfo ENOTFOUND"); };
   await assert.rejects(send(msg), (err) => classifyError(err).connection);
 });
+
+test("Brevo and Resend payloads carry attachments as base64", async () => {
+  const files = [{ filename: "prices.pdf", contentType: "application/pdf", content: Buffer.from("%PDF-1.4 test") }];
+  const withFile = buildMessage({ subject: "s", body: "b", fromName: "O", fromEmail: "news@orvellaz.xyz" }, { email: "ada@example.com", name: "" }, settings, files);
+  let body;
+  global.fetch = async (url, opts) => { body = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({}) }; };
+  await send(withFile);
+  assert.deepStrictEqual(body.attachments, [{ filename: "prices.pdf", content: Buffer.from("%PDF-1.4 test").toString("base64") }]);
+});

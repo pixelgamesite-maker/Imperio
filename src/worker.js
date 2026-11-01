@@ -2,6 +2,14 @@
 const { db, getSettings, transaction } = require("./db");
 const { send, buildMessage, classifyError } = require("./mailer");
 const { zonedParts } = require("./util");
+const attachments = require("./attachments");
+
+// File contents for the batch being sent, loaded once rather than for every recipient.
+let fileCache = { batchId: null, files: [] };
+function filesFor(batchId) {
+  if (fileCache.batchId !== batchId) fileCache = { batchId, files: attachments.load(attachments.forBatch(batchId)) };
+  return fileCache.files;
+}
 
 const state = {
   phase: "idle",          // idle | sending | between | break | waiting-limit | waiting-morning | backoff
@@ -58,7 +66,7 @@ async function step() {
   try {
     await send(buildMessage({
       subject: batch.subject, body: batch.body, fromName: batch.from_name, fromEmail: batch.from_email
-    }, r, settings));
+    }, r, settings, filesFor(batch.id)));
     transaction(() => { q.markRecipient.run("sent", null, Date.now(), zp.day, r.id); countSend(); });
     state.lastError = null;
   } catch (err) {

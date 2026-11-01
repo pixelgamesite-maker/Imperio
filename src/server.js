@@ -6,6 +6,7 @@ const { db, getSettings, saveSettings, transaction } = require("./db");
 const auth = require("./auth");
 const worker = require("./worker");
 const { send, verify, providerInfo, buildMessage, classifyError } = require("./mailer");
+const attachments = require("./attachments");
 const { parseRecipients, isEmail, verifyUnsubscribe, escapeHtml, zonedParts } = require("./util");
 
 const app = express();
@@ -78,7 +79,7 @@ app.use(express.static(path.join(__dirname, "..", "public"), { index: "index.htm
 
 // ---------- API ----------
 const api = express.Router();
-api.use(express.json({ limit: "5mb" }));
+api.use(express.json({ limit: "8mb" })); // room for a 5 MB attachment sent as base64
 api.use(auth.requireSameOrigin);
 api.use((req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 
@@ -172,6 +173,17 @@ api.post("/smtp/test", async (req, res) => {
   }
 });
 
+// ----- Attachments -----
+api.post("/attachments", (req, res) => {
+  const b = req.body || {};
+  if (typeof b.data !== "string") return res.status(400).json({ error: "No file received." });
+  try {
+    res.status(201).json({ attachment: attachments.save(b.name, Buffer.from(b.data, "base64")) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ----- Compose -----
 api.post("/recipients/check", (req, res) => {
   const p = parseRecipients((req.body || {}).text, suppressedSet());
@@ -193,7 +205,9 @@ function validateMessage(b) {
   if (!body.trim()) errors.push("Write a message.");
   if (body.length > 100000) errors.push("The message is too long.");
   if (!isEmail(fromEmail)) errors.push("The from address isn't a valid email.");
-  return { errors, subject, body, fromName: fromName || config.brandName, fromEmail };
+  let files = [];
+  try { files = attachments.resolve(b.attachmentIds); } catch (err) { errors.push(err.message); }
+  return { errors, subject, body, fromName: fromName || config.brandName, fromEmail, attachments: files };
 }
 
 api.post("/test-send", async (req, res) => {
@@ -203,7 +217,7 @@ api.post("/test-send", async (req, res) => {
   if (worker.usedToday() >= s.dailyLimit) return res.status(429).json({ error: "Today's daily limit is used up, so the test wasn't sent." });
   const to = auth.adminEmail();
   try {
-    await send(buildMessage(m, { email: to, name: String((req.body || {}).testName || "").trim() }, s));
+    await send(buildMessage(m, { email: to, name: String((req.body || {}).testName || "").trim() }, s, attachments.load(m.attachments)));
     worker.countSend();
     res.json({ ok: true, to });
   } catch (err) {
@@ -224,6 +238,7 @@ api.post("/batches", (req, res) => {
     const info = Q.insertBatch.run(m.subject, m.body, m.fromName, m.fromEmail, p.ready.length, skipped, null, Date.now());
     const batchId = Number(info.lastInsertRowid);
     p.ready.forEach((r, i) => Q.insertRecipient.run(batchId, i, r.email, r.name));
+    attachments.linkToBatch(batchId, m.attachments);
     return batchId;
   });
   res.status(201).json({ batch: batchView(Q.batch.get(id)) });
@@ -241,7 +256,7 @@ api.get("/batches/:id", (req, res) => {
   const filter = ["sent", "failed", "pending", "skipped", "cancelled"].includes(req.query.status) ? req.query.status : "all";
   const limit = int(req.query.limit, 1, 1000) || 500;
   const offset = int(req.query.offset, 0, 1e9) || 0;
-  res.json({ batch: batchView(b), recipients: Q.recipients.all(b.id, filter, filter, limit, offset) });
+  res.json({ batch: Object.assign(batchView(b), { attachments: attachments.forBatch(b.id) }), recipients: Q.recipients.all(b.id, filter, filter, limit, offset) });
 });
 
 api.get("/batches/:id/failed.csv", (req, res) => {
@@ -279,6 +294,7 @@ api.post("/batches/:id/retry", (req, res) => {
     const info = Q.insertBatch.run(b.subject, b.body, b.from_name, b.from_email, failed.length, 0, b.id, Date.now());
     const newId = Number(info.lastInsertRowid);
     failed.forEach((r, i) => Q.insertRecipient.run(newId, i, r.email, r.name));
+    attachments.linkToBatch(newId, attachments.forBatch(b.id));
     return newId;
   });
   res.status(201).json({ batch: batchView(Q.batch.get(id)) });
@@ -328,6 +344,8 @@ if (require.main === module) {
   app.listen(config.port, config.host, () => {
     console.log(`${config.appName} listening on http://${config.host}:${config.port} (public: ${config.baseUrl})`);
     worker.start();
+    attachments.cleanup();
+    setInterval(attachments.cleanup, 3600 * 1000).unref();
   });
 }
 

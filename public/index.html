@@ -103,6 +103,17 @@
               <textarea class="textarea" id="body" rows="12" placeholder="Hello {name},"></textarea>
               <p class="hint">If a recipient has no name, {name} becomes "there". Your signature and the unsubscribe line are added at the bottom.</p>
             </div>
+            <div class="field">
+              <div class="attach-row">
+                <button class="btn" type="button" id="attachBtn">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"/></svg>
+                  Attach file
+                </button>
+                <span class="hint" id="attachHint">PDF, images, Word, Excel or PowerPoint. Up to 3 files, 5 MB in total.</span>
+                <input type="file" id="fileInput" multiple hidden accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt">
+              </div>
+              <div class="attach-list" id="attachList" hidden></div>
+            </div>
           </div>
           <div class="send-bar">
             <div class="btn-row">

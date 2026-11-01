@@ -174,6 +174,20 @@ main {
 .issue em { font-style: normal; color: var(--muted); margin-left: auto; white-space: nowrap; }
 .recip-box { padding: 16px 20px 20px; display: grid; gap: 8px; }
 
+/* Attachments */
+.attach-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.attach-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.attach-chip {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+  border: 1px solid var(--rule); background: var(--sunken); border-radius: var(--r-sm);
+  padding: 5px 6px 5px 10px; font-size: var(--step--1);
+}
+.attach-chip .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-weight: 600; }
+.attach-chip .size { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.attach-chip .x { font-size: 18px; padding: 0 4px; }
+.attach-chip.is-uploading { opacity: 0.6; }
+.mail-files { padding: 10px 14px; border-top: 1px solid var(--rule); font-size: var(--step--1); display: flex; flex-wrap: wrap; gap: 6px 14px; }
+
 /* Pills */
 .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 99px; padding: 2px 10px; font-size: var(--step--1); font-weight: 600; white-space: nowrap; }
 .pill-good { background: var(--good-soft); color: var(--good); }
