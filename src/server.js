@@ -166,8 +166,9 @@ api.post("/smtp/test", async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     const e = classifyError(err);
-    const what = config.provider === "smtp" ? "The mail server rejected the username or password." : "The email service rejected the API key.";
-    res.status(502).json({ error: e.auth ? what : "Couldn't reach the email service: " + e.message });
+    const label = providerInfo().label;
+    const what = config.provider === "smtp" ? "The mail server rejected the username or password." : label + " rejected the API key.";
+    res.status(502).json({ error: (e.auth ? what : "Couldn't reach " + label + ".") + " Reason given: " + e.message });
   }
 });
 
