@@ -75,7 +75,11 @@ app.post("/unsubscribe/undo", (req, res) => {
 });
 
 // ---------- Static app ----------
-app.use(express.static(path.join(__dirname, "..", "public"), { index: "index.html", maxAge: "1h" }));
+// "no-cache" makes browsers check for a newer version on every load, so an update never pairs a new page with an old script.
+app.use(express.static(path.join(__dirname, "..", "public"), {
+  index: "index.html",
+  setHeaders: (res) => res.setHeader("Cache-Control", "no-cache")
+}));
 
 // ---------- API ----------
 const api = express.Router();
