@@ -87,7 +87,7 @@
   // ---------- Settings values ----------
   function settings() {
     return {
-      daily: Math.max(1, parseInt($("dailyLimit").value, 10) || 300),
+      daily: Math.max(1, parseInt($("dailyLimit").value, 10) || 200),
       delay: Math.max(1, parseInt($("delay").value, 10) || 4),
       batch: Math.max(1, parseInt($("batchSize").value, 10) || 50),
       pause: Math.max(0, parseInt($("batchPause").value, 10) || 0),
@@ -101,7 +101,7 @@
   }
   function updateSpeedCalc() {
     var s = settings();
-    var day = Math.min(s.daily, 1000);
+    var day = s.daily;
     $("speedCalc").innerHTML = "At this speed, " + fmt(day) + " emails take about <b>" + duration(sendSeconds(day)) + "</b>. A list of 1,000 would take <b>" + Math.ceil(1000 / s.daily) + " day" + (Math.ceil(1000 / s.daily) > 1 ? "s" : "") + "</b>.";
   }
 
@@ -499,11 +499,20 @@
 
     // Settings
     var PRESETS = {
-      zoho: ["smtppro.zoho.com", "465"], godaddy: ["smtpout.secureserver.net", "465"],
-      brevo: ["smtp-relay.brevo.com", "587"], ses: ["email-smtp.eu-west-1.amazonaws.com", "587"], custom: ["", "587"]
+      // [server, port, suggested daily limit, suggested seconds between emails]
+      zoho: ["smtppro.zoho.com", "465", "200", "30"],
+      godaddy: ["smtpout.secureserver.net", "465", "450", "10"],
+      brevo: ["smtp-relay.brevo.com", "587", "500", "4"],
+      ses: ["email-smtp.eu-west-1.amazonaws.com", "587", "500", "4"],
+      custom: ["", "587", "200", "10"]
     };
     $("smtpPreset").addEventListener("change", function (e) {
-      var p = PRESETS[e.target.value]; $("smtpHost").value = p[0]; $("smtpPort").value = p[1]; $("connOk").hidden = true;
+      var p = PRESETS[e.target.value];
+      $("smtpHost").value = p[0]; $("smtpPort").value = p[1];
+      $("dailyLimit").value = p[2]; $("delay").value = p[3];
+      $("connOk").hidden = true;
+      updateSpeedCalc(); renderQueue();
+      toast("Daily limit and speed set for " + e.target.selectedOptions[0].textContent);
     });
     $("testConn").addEventListener("click", function () {
       var b = $("testConn"); b.disabled = true; b.textContent = "Testing…";

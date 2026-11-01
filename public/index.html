@@ -91,8 +91,8 @@
       </a>
     </nav>
     <div class="side-foot">
-      <div class="num"><b id="usedToday">132</b> of 300 sent today</div>
-      <div class="meter"><i id="usedMeter" style="width:44%"></i></div>
+      <div class="num"><b id="usedToday">132</b> of 450 sent today</div>
+      <div class="meter"><i id="usedMeter" style="width:29%"></i></div>
       <a href="#login" class="btn-quiet" style="padding:0">Sign out</a>
     </div>
   </aside>
@@ -178,7 +178,7 @@ Reply to this email or call us on 0803 000 0000 to place an order.</textarea>
       <div class="page-head">
         <div>
           <h1>Sending</h1>
-          <p>One email every 4 seconds, up to 300 a day. Anything left over goes out tomorrow from 8:00.</p>
+          <p>One email every 10 seconds, up to 450 a day. Anything left over goes out tomorrow from 8:00.</p>
         </div>
       </div>
 
@@ -251,15 +251,15 @@ Reply to this email or call us on 0803 000 0000 to place an order.</textarea>
             <div class="field">
               <label for="smtpPreset">Provider</label>
               <select class="select" id="smtpPreset">
-                <option value="zoho">Zoho Mail</option>
                 <option value="godaddy">GoDaddy Professional Email</option>
+                <option value="zoho">Zoho Mail</option>
                 <option value="brevo">Brevo</option>
                 <option value="ses">Amazon SES</option>
                 <option value="custom">Other</option>
               </select>
             </div>
             <div class="row">
-              <div class="field"><label for="smtpHost">Server</label><input class="input" id="smtpHost" value="smtppro.zoho.com"></div>
+              <div class="field"><label for="smtpHost">Server</label><input class="input" id="smtpHost" value="smtpout.secureserver.net"></div>
               <div class="field"><label for="smtpPort">Port</label><input class="input num" id="smtpPort" value="465" inputmode="numeric"></div>
             </div>
             <div class="field"><label for="smtpUser">Username</label><input class="input" id="smtpUser" value="news@placornat.com" autocomplete="off"></div>
@@ -279,10 +279,10 @@ Reply to this email or call us on 0803 000 0000 to place an order.</textarea>
           <div class="panel panel-pad">
             <section>
               <h2>Sending speed</h2>
-              <p>Keep these below your provider's limits so the mailbox doesn't get blocked.</p>
+              <p>Choosing a provider fills in safe values. GoDaddy allows 500 a day over SMTP, so 450 leaves room for tests and retries.</p>
               <div class="row">
-                <div class="field"><label for="dailyLimit">Daily limit</label><div class="suffix"><input class="input num" id="dailyLimit" value="300" inputmode="numeric"><span>emails</span></div></div>
-                <div class="field"><label for="delay">Wait between emails</label><div class="suffix"><input class="input num" id="delay" value="4" inputmode="numeric"><span>seconds</span></div></div>
+                <div class="field"><label for="dailyLimit">Daily limit</label><div class="suffix"><input class="input num" id="dailyLimit" value="450" inputmode="numeric"><span>emails</span></div></div>
+                <div class="field"><label for="delay">Wait between emails</label><div class="suffix"><input class="input num" id="delay" value="10" inputmode="numeric"><span>seconds</span></div></div>
               </div>
               <div class="row">
                 <div class="field"><label for="batchSize">Batch size</label><div class="suffix"><input class="input num" id="batchSize" value="50" inputmode="numeric"><span>then a pause</span></div></div>
