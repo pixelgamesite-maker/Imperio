@@ -144,8 +144,11 @@
     $("batchSize").value = s.batchSize; $("batchPause").value = s.batchPauseMinutes; $("startHour").value = s.startHour;
     $("signature").value = s.signature; $("unsubText").value = s.unsubscribeText; $("footerAddress").value = s.footerAddress;
     var m = data.smtp;
-    $("smtpFacts").innerHTML = "<dt>Server</dt><dd>" + esc(m.host) + "</dd><dt>Port</dt><dd>" + esc(m.port) + (m.secure ? " (SSL)" : " (STARTTLS)") + "</dd>" +
-      "<dt>Username</dt><dd>" + esc(m.user) + "</dd><dt>Password</dt><dd>" + (m.passwordSet ? "Saved in .env" : '<span style="color:var(--bad)">Missing from .env</span>') + "</dd>";
+    var missing = '<span style="color:var(--bad)">Missing</span>';
+    $("smtpFacts").innerHTML = m.provider === "smtp"
+      ? "<dt>Sends with</dt><dd>SMTP mailbox</dd><dt>Server</dt><dd>" + esc(m.host) + "</dd><dt>Port</dt><dd>" + esc(m.port) + (m.secure ? " (SSL)" : " (STARTTLS)") + "</dd>" +
+        "<dt>Username</dt><dd>" + esc(m.user) + "</dd><dt>Password</dt><dd>" + (m.passwordSet ? "Saved on the server" : missing) + "</dd>"
+      : "<dt>Sends with</dt><dd>" + esc(m.label) + "</dd><dt>API key</dt><dd>" + (m.keySet ? "Saved on the server" : missing) + "</dd>";
     $("supUnsub").textContent = fmt(data.suppressions.unsubscribed) + " unsubscribed";
     $("supBounced").textContent = fmt(data.suppressions.bounced) + " bounced";
     $("settingsError").hidden = true;

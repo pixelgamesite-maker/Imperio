@@ -226,8 +226,8 @@
         <div class="stack">
           <div class="panel panel-pad">
             <section>
-              <h2>Mail server</h2>
-              <p>These come from the server's .env file, so the password never passes through this page. To switch provider, change .env and restart the app.</p>
+              <h2>Sending service</h2>
+              <p>Set in the server's variables (.env, or Railway's Variables tab), so passwords and keys never pass through this page. Change them there and restart to switch.</p>
               <dl class="facts" id="smtpFacts"></dl>
               <div class="btn-row" style="align-items:center">
                 <button class="btn" type="button" id="testConn">Test connection</button>
@@ -244,7 +244,7 @@
                 <div class="field"><label for="sFromName">Default from name</label><input class="input" id="sFromName" maxlength="100"></div>
                 <div class="field"><label for="sFromEmail">Default from address</label><input class="input" id="sFromEmail" type="email"></div>
               </div>
-              <p class="hint">Use the same address as the mailbox login, or GoDaddy may refuse to send.</p>
+              <p class="hint">Use an address on a domain you have verified with your sending service. With GoDaddy, use the mailbox address itself.</p>
             </section>
           </div>
         </div>

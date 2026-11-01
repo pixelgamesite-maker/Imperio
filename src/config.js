@@ -24,6 +24,11 @@ const config = {
   secret: env("SECRET", ""),
   dataDir: path.resolve(__dirname, "..", env("DATA_DIR", process.env.RAILWAY_VOLUME_MOUNT_PATH || "./data")),
   adminEmail: env("ADMIN_EMAIL", "").toLowerCase(),
+  // How email leaves the app: "smtp" (a mailbox such as GoDaddy), "resend" or "brevo" (HTTPS APIs, which work on
+  // hosts that block SMTP, such as Railway's Hobby plan). Left empty, it picks the API whose key is set, else SMTP.
+  provider: (env("SEND_PROVIDER", process.env.RESEND_API_KEY ? "resend" : process.env.BREVO_API_KEY ? "brevo" : "smtp")).toLowerCase(),
+  resendKey: env("RESEND_API_KEY", ""),
+  brevoKey: env("BREVO_API_KEY", ""),
   smtp: {
     host: env("SMTP_HOST", ""),
     port: parseInt(env("SMTP_PORT", "465"), 10),
@@ -39,7 +44,10 @@ function assertReady() {
   const problems = [];
   if (!config.secret || config.secret === "change-me" || config.secret.length < 32) problems.push("SECRET must be a random string of at least 32 characters");
   if (!config.adminEmail) problems.push("ADMIN_EMAIL is missing");
-  if (!config.smtp.host || !config.smtp.user) problems.push("SMTP_HOST and SMTP_USER are required");
+  if (!["smtp", "resend", "brevo"].includes(config.provider)) problems.push("SEND_PROVIDER must be smtp, resend or brevo");
+  if (config.provider === "smtp" && (!config.smtp.host || !config.smtp.user)) problems.push("SMTP_HOST and SMTP_USER are required");
+  if (config.provider === "resend" && !config.resendKey) problems.push("RESEND_API_KEY is missing");
+  if (config.provider === "brevo" && !config.brevoKey) problems.push("BREVO_API_KEY is missing");
   if (problems.length) {
     console.error("Fix .env before starting:\n - " + problems.join("\n - "));
     process.exit(1);

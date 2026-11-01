@@ -5,7 +5,7 @@ const { config, assertReady } = require("./config");
 const { db, getSettings, saveSettings, transaction } = require("./db");
 const auth = require("./auth");
 const worker = require("./worker");
-const { getTransporter, buildMessage, classifyError } = require("./mailer");
+const { send, verify, providerInfo, buildMessage, classifyError } = require("./mailer");
 const { parseRecipients, isEmail, verifyUnsubscribe, escapeHtml, zonedParts } = require("./util");
 
 const app = express();
@@ -130,7 +130,7 @@ api.get("/settings", (req, res) => {
   const counts = Object.fromEntries(Q.suppressionCounts.all().map((r) => [r.reason, r.n]));
   res.json({
     settings: s,
-    smtp: { host: config.smtp.host, port: config.smtp.port, secure: config.smtp.secure, user: config.smtp.user, passwordSet: !!config.smtp.pass },
+    smtp: providerInfo(),
     suppressions: { unsubscribed: counts.unsubscribed || 0, bounced: counts.bounced || 0 }
   });
 });
@@ -162,11 +162,12 @@ api.put("/settings", (req, res) => {
 
 api.post("/smtp/test", async (req, res) => {
   try {
-    await getTransporter().verify();
+    await verify();
     res.json({ ok: true });
   } catch (err) {
     const e = classifyError(err);
-    res.status(502).json({ error: e.auth ? "The mail server rejected the username or password in .env." : "Couldn't reach the mail server: " + e.message });
+    const what = config.provider === "smtp" ? "The mail server rejected the username or password." : "The email service rejected the API key.";
+    res.status(502).json({ error: e.auth ? what : "Couldn't reach the email service: " + e.message });
   }
 });
 
@@ -201,12 +202,12 @@ api.post("/test-send", async (req, res) => {
   if (worker.usedToday() >= s.dailyLimit) return res.status(429).json({ error: "Today's daily limit is used up, so the test wasn't sent." });
   const to = auth.adminEmail();
   try {
-    await getTransporter().sendMail(buildMessage(m, { email: to, name: String((req.body || {}).testName || "").trim() }, s));
+    await send(buildMessage(m, { email: to, name: String((req.body || {}).testName || "").trim() }, s));
     worker.countSend();
     res.json({ ok: true, to });
   } catch (err) {
     const e = classifyError(err);
-    res.status(502).json({ error: e.auth ? "The mail server rejected the login. Check SMTP_USER and SMTP_PASS in .env." : "The test didn't send: " + e.message });
+    res.status(502).json({ error: e.auth ? (config.provider === "smtp" ? "The mail server rejected the login. Check SMTP_USER and SMTP_PASS." : "The email service rejected the API key.") : "The test didn't send: " + e.message });
   }
 });
 

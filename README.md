@@ -25,7 +25,7 @@ A private bulk-email sender. One admin signs in, writes one email, pastes a list
 
 ## Deploy on Railway
 
-Railway only allows outgoing SMTP (which GoDaddy mail needs) on the **Pro plan**. On Hobby, sending through GoDaddy will time out.
+Railway only allows outgoing SMTP (which GoDaddy mail needs) on the **Pro plan**. On the Hobby plan, send through **Resend** or **Brevo** instead: they use HTTPS, which Railway allows on every plan. First verify `orvellaz.xyz` with that service (it gives you DNS records to add in GoDaddy), then set `SEND_PROVIDER` and its API key below.
 
 1. In Railway, choose **New Project → Deploy from GitHub repo** and pick this repo. It uses `railway.json` and Node 22 from `.nvmrc`.
 2. On the service, open **Settings → Volumes**, add a volume, and mount it at `/data`. This keeps the database between deploys. The app finds the volume on its own.
@@ -38,8 +38,10 @@ Railway only allows outgoing SMTP (which GoDaddy mail needs) on the **Pro plan**
    | `ADMIN_PASSWORD` | the password for signing in to the app (changing it later resets the password) |
    | `APP_NAME` / `BRAND_NAME` | `Orvellaz Mailer` / `Orvellaz` |
    | `BASE_URL` | `https://bulk.orvellaz.xyz` |
-   | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | `smtpout.secureserver.net` / `465` / `true` |
-   | `SMTP_USER` / `SMTP_PASS` | the mailbox address and its password |
+   | `SEND_PROVIDER` | `resend`, `brevo`, or `smtp` (Pro plan only) |
+   | `RESEND_API_KEY` or `BREVO_API_KEY` | the key from that service, if you use one |
+   | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | only for `smtp`: `smtpout.secureserver.net` / `465` / `true` |
+   | `SMTP_USER` / `SMTP_PASS` | only for `smtp`: the mailbox address and its password |
 
 4. Under **Settings → Networking**, add the custom domain `bulk.orvellaz.xyz`. Railway shows a CNAME record. Add it in GoDaddy DNS (name `bulk`). Railway issues the HTTPS certificate itself.
 5. Run the live test from step 8 below.

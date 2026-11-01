@@ -1,6 +1,6 @@
 "use strict";
 const { db, getSettings, transaction } = require("./db");
-const { getTransporter, buildMessage, classifyError } = require("./mailer");
+const { send, buildMessage, classifyError } = require("./mailer");
 const { zonedParts } = require("./util");
 
 const state = {
@@ -56,7 +56,7 @@ async function step() {
   state.busy = true;
   state.phase = "sending";
   try {
-    await getTransporter().sendMail(buildMessage({
+    await send(buildMessage({
       subject: batch.subject, body: batch.body, fromName: batch.from_name, fromEmail: batch.from_email
     }, r, settings));
     transaction(() => { q.markRecipient.run("sent", null, Date.now(), zp.day, r.id); countSend(); });
