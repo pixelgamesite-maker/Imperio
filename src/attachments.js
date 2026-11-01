@@ -21,7 +21,8 @@ const TYPES = {
   ppt: "application/vnd.ms-powerpoint",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   csv: "text/csv", txt: "text/plain",
-  zip: "application/zip"
+  zip: "application/zip",
+  rar: "application/vnd.rar" // Brevo refuses RAR; a test send shows the refusal before a batch goes out
 };
 
 db.exec(`
@@ -58,7 +59,7 @@ function cleanName(name) {
 function save(name, buffer) {
   const filename = cleanName(name);
   const ext = (filename.split(".").pop() || "").toLowerCase();
-  if (!TYPES[ext] || !filename.includes(".")) throw new Error("That file type can't be attached. Use PDF, an image, Word, Excel, PowerPoint, CSV, text or ZIP. RAR files aren't accepted by the email service, so save them as ZIP.");
+  if (!TYPES[ext] || !filename.includes(".")) throw new Error("That file type can't be attached. Use PDF, an image, Word, Excel, PowerPoint, CSV, text, ZIP or RAR.");
   if (!buffer.length) throw new Error("That file is empty.");
   if (buffer.length > MAX_TOTAL_BYTES) throw new Error("Files can be up to 5 MB.");
   const id = crypto.randomBytes(16).toString("hex");

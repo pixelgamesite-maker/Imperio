@@ -41,3 +41,14 @@ test("Brevo and Resend payloads carry attachments as base64", async () => {
   await send(withFile);
   assert.deepStrictEqual(body.attachments, [{ filename: "prices.pdf", content: Buffer.from("%PDF-1.4 test").toString("base64") }]);
 });
+
+test("a refused attachment pauses the batch rather than blocking recipients", () => {
+  const err = Object.assign(new Error("Unsupported file extension: .rar"), { httpStatus: 400 });
+  const c = classifyError(err);
+  assert.strictEqual(c.badContent, true);
+  assert.strictEqual(c.permanentRecipient, false);
+  const generic = Object.assign(new Error("Unable to send to this contact"), { httpStatus: 400 });
+  assert.strictEqual(classifyError(generic).permanentRecipient, false);
+  const badAddr = Object.assign(new Error("Invalid email address"), { httpStatus: 400 });
+  assert.strictEqual(classifyError(badAddr).permanentRecipient, true);
+});

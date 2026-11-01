@@ -25,6 +25,7 @@ const q = {
   nextRecipient: db.prepare("SELECT * FROM recipients WHERE batch_id = ? AND status = 'pending' ORDER BY position LIMIT 1"),
   isSuppressed: db.prepare("SELECT reason FROM suppressions WHERE email = ?"),
   markRecipient: db.prepare("UPDATE recipients SET status = ?, error = ?, attempted_at = ?, attempt_day = ? WHERE id = ?"),
+  pauseBatch: db.prepare("UPDATE batches SET status = 'paused' WHERE id = ? AND status = 'sending'"),
   finishBatch: db.prepare("UPDATE batches SET status = 'done', finished_at = ? WHERE id = ? AND status = 'sending'"),
   bumpDay: db.prepare("INSERT INTO daily_counts (day, count) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET count = count + 1"),
   dayCount: db.prepare("SELECT count FROM daily_counts WHERE day = ?"),
@@ -78,6 +79,13 @@ async function step() {
       state.nextAt = Date.now() + 5 * 60 * 1000;
       return;
     }
+    if (e.badContent) {
+      // Pause instead of failing every recipient with the same error; the admin can fix the email and resend.
+      q.pauseBatch.run(batch.id);
+      state.lastError = { kind: "content", message: e.message, at: Date.now(), batchId: batch.id };
+      state.phase = "idle";
+      return;
+    }
     if (e.throttled && !e.permanentRecipient) {
       state.lastError = { kind: "throttled", message: e.message, at: Date.now() };
       state.phase = "backoff";
@@ -114,7 +122,7 @@ function start() {
 
 /** Skip any wait (used after resume or when the admin changes settings). */
 function wake() {
-  if (state.phase === "backoff") state.lastError = null;
+  if (state.phase === "backoff" || (state.lastError && state.lastError.kind === "content")) state.lastError = null;
   state.nextAt = 0;
 }
 

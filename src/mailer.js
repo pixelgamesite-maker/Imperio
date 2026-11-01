@@ -151,7 +151,9 @@ function classifyError(err) {
       connection: st === 0 || st >= 500,
       throttled: st === 429,
       // The service refused this address outright (e.g. not a real address); don't email it again.
-      permanentRecipient: (st === 400 || st === 422) && /recipient|invalid.*(email|address)|to\b/i.test(message)
+      permanentRecipient: (st === 400 || st === 422) && /recipient|invalid.*(email|address)/i.test(message) && !/attach|extension|file/i.test(message),
+      // The service refused the email itself (e.g. an attachment type): every recipient would fail the same way.
+      badContent: (st === 400 || st === 422) && /attach|extension|file/i.test(message)
     };
   }
   const code = err && (err.responseCode || 0);

@@ -277,7 +277,7 @@
 
   // ---------- Attachments ----------
   var MAX_FILES = 3, MAX_TOTAL = 5 * 1024 * 1024;
-  var EXTS = ["pdf", "jpg", "jpeg", "png", "gif", "webp", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "zip"];
+  var EXTS = ["pdf", "jpg", "jpeg", "png", "gif", "webp", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "zip", "rar"];
   var attached = [];
   try { attached = JSON.parse(storeGet("imperio-attachments", "[]")) || []; } catch (e) { attached = []; }
 
@@ -309,7 +309,7 @@
     files.forEach(function (file) {
       var ext = (file.name.split(".").pop() || "").toLowerCase();
       if (attached.length >= MAX_FILES) { toast("Attach up to 3 files."); return; }
-      if (EXTS.indexOf(ext) === -1 || file.name.indexOf(".") === -1) { toast(ext === "rar" ? "RAR files can't be sent through Brevo. Save it as a ZIP file instead and attach that." : file.name + " can't be attached. Use PDF, an image, Word, Excel, PowerPoint or ZIP."); return; }
+      if (EXTS.indexOf(ext) === -1 || file.name.indexOf(".") === -1) { toast(file.name + " can't be attached. Use PDF, an image, Word, Excel, PowerPoint, ZIP or RAR."); return; }
       if (total + file.size > MAX_TOTAL) { toast("Attachments can add up to 5 MB per email. " + file.name + " is too big."); return; }
       total += file.size;
       var entry = { name: file.name, size: file.size };
@@ -318,6 +318,7 @@
         return api("POST", "/attachments", { name: file.name, data: data });
       }).then(function (res) {
         Object.assign(entry, res.attachment); saveAttached(); renderAttached();
+        if (ext === "rar") toast("RAR attached. Send a test to yourself first: Brevo may refuse RAR files.");
       }, function (err) {
         attached.splice(attached.indexOf(entry), 1); renderAttached(); toast(err.message);
       });
@@ -473,7 +474,10 @@
     $("queueRule").textContent = "One email every " + (s.delaySeconds === 1 ? "second" : s.delaySeconds + " seconds") + ", up to " + fmt(s.dailyLimit) + " a day, from " + pad(s.startHour) + ":00. Anything left over continues the next day.";
 
     var err = w.lastError;
-    if (err && (w.phase === "backoff")) {
+    if (err && err.kind === "content") {
+      $("workerError").textContent = "Sending paused: the email service refused this email (" + err.message + "). If it's the attachment, remove it or save it as a ZIP, then send the batch again. Nothing was marked as failed.";
+      $("workerError").hidden = false;
+    } else if (err && (w.phase === "backoff")) {
       var mins = Math.max(1, Math.ceil((w.nextAt - d.now) / 60000));
       $("workerError").textContent = (err.kind === "auth" ? "The mail server rejected the login. Check SMTP_USER and SMTP_PASS in .env, then restart the app." :
         err.kind === "throttled" ? "The mail server asked us to slow down." : "Couldn't reach the mail server.") +
