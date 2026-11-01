@@ -23,6 +23,27 @@ A private bulk-email sender. One admin signs in, writes one email, pastes a list
 - A mailbox with SMTP access (set up for GoDaddy Professional Email: `smtpout.secureserver.net`, port 465, SSL)
 - A subdomain with HTTPS, for example `bulk.orvellaz.xyz`
 
+## Deploy on Railway
+
+Railway only allows outgoing SMTP (which GoDaddy mail needs) on the **Pro plan**. On Hobby, sending through GoDaddy will time out.
+
+1. In Railway, choose **New Project → Deploy from GitHub repo** and pick this repo. It uses `railway.json` and Node 22 from `.nvmrc`.
+2. On the service, open **Settings → Volumes**, add a volume, and mount it at `/data`. This keeps the database between deploys. The app finds the volume on its own.
+3. Open **Variables** and add:
+
+   | Variable | Value |
+   |---|---|
+   | `SECRET` | a long random string |
+   | `ADMIN_EMAIL` | `mateo@orvellaz.xyz` |
+   | `ADMIN_PASSWORD` | the password for signing in to the app (changing it later resets the password) |
+   | `APP_NAME` / `BRAND_NAME` | `Orvellaz Mailer` / `Orvellaz` |
+   | `BASE_URL` | `https://bulk.orvellaz.xyz` |
+   | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | `smtpout.secureserver.net` / `465` / `true` |
+   | `SMTP_USER` / `SMTP_PASS` | the mailbox address and its password |
+
+4. Under **Settings → Networking**, add the custom domain `bulk.orvellaz.xyz`. Railway shows a CNAME record. Add it in GoDaddy DNS (name `bulk`). Railway issues the HTTPS certificate itself.
+5. Run the live test from step 8 below.
+
 ## Deploy on aaPanel
 
 **1. Point the subdomain at the server.** In GoDaddy DNS, add an **A** record: name `bulk`, value your server's IP.

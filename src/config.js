@@ -7,14 +7,22 @@ function env(name, fallback) {
   return v === undefined || v === "" ? fallback : v;
 }
 
+const onRailway = !!process.env.RAILWAY_ENVIRONMENT;
+const railwayUrl = process.env.RAILWAY_PUBLIC_DOMAIN ? "https://" + process.env.RAILWAY_PUBLIC_DOMAIN : "";
+
 const config = {
+  onRailway,
   appName: env("APP_NAME", "Imperio Mailer"),
   brandName: env("BRAND_NAME", "Imperio"),
-  baseUrl: env("BASE_URL", "http://localhost:3100").replace(/\/+$/, ""),
+  baseUrl: env("BASE_URL", railwayUrl || "http://localhost:3100").replace(/\/+$/, ""),
   port: parseInt(env("PORT", "3100"), 10),
+  // On a VPS the app sits behind nginx on the same machine; on Railway it must accept outside connections.
+  host: env("HOST", onRailway ? "0.0.0.0" : "127.0.0.1"),
+  trustProxy: onRailway ? 1 : "loopback",
+  adminPassword: env("ADMIN_PASSWORD", ""),
   timezone: env("TIMEZONE", "Africa/Lagos"),
   secret: env("SECRET", ""),
-  dataDir: path.resolve(__dirname, "..", env("DATA_DIR", "./data")),
+  dataDir: path.resolve(__dirname, "..", env("DATA_DIR", process.env.RAILWAY_VOLUME_MOUNT_PATH || "./data")),
   adminEmail: env("ADMIN_EMAIL", "").toLowerCase(),
   smtp: {
     host: env("SMTP_HOST", ""),

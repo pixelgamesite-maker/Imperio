@@ -10,7 +10,9 @@ const { parseRecipients, isEmail, verifyUnsubscribe, escapeHtml, zonedParts } = 
 
 const app = express();
 app.disable("x-powered-by");
-app.set("trust proxy", "loopback");
+app.set("trust proxy", config.trustProxy);
+
+app.get("/healthz", (req, res) => res.type("text").send("ok"));
 
 // ---------- Security headers ----------
 app.use((req, res, next) => {
@@ -317,9 +319,12 @@ app.use((err, req, res, next) => {
 
 if (require.main === module) {
   assertReady();
-  if (!auth.hasAdmin()) console.warn("No admin password yet. Run: npm run set-password");
-  app.listen(config.port, "127.0.0.1", () => {
-    console.log(`${config.appName} listening on http://127.0.0.1:${config.port} (public: ${config.baseUrl})`);
+  try {
+    if (auth.syncAdminFromEnv()) console.log("Admin password set from ADMIN_PASSWORD.");
+  } catch (err) { console.error("ADMIN_PASSWORD not used: " + err.message); }
+  if (!auth.hasAdmin()) console.warn("No admin password yet. Set ADMIN_PASSWORD or run: npm run set-password");
+  app.listen(config.port, config.host, () => {
+    console.log(`${config.appName} listening on http://${config.host}:${config.port} (public: ${config.baseUrl})`);
     worker.start();
   });
 }

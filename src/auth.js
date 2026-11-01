@@ -32,6 +32,15 @@ function setPassword(email, password) {
 
 function hasAdmin() { return !!q.admin.get(); }
 
+/** Lets hosts without a terminal (Railway) set the password with the ADMIN_PASSWORD variable. */
+function syncAdminFromEnv() {
+  if (!config.adminPassword || !config.adminEmail) return false;
+  const admin = q.admin.get();
+  if (admin && admin.email === config.adminEmail && bcrypt.compareSync(config.adminPassword, admin.password_hash)) return false;
+  setPassword(config.adminEmail, config.adminPassword);
+  return true;
+}
+
 function parseCookies(header) {
   const out = {};
   String(header || "").split(";").forEach((part) => {
@@ -101,4 +110,4 @@ function requireSameOrigin(req, res, next) {
   next();
 }
 
-module.exports = { login, logout, requireAuth, requireSameOrigin, setPassword, hasAdmin, adminEmail: () => (q.admin.get() || {}).email };
+module.exports = { login, logout, requireAuth, requireSameOrigin, setPassword, hasAdmin, syncAdminFromEnv, adminEmail: () => (q.admin.get() || {}).email };
