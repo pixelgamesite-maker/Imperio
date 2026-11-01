@@ -1,4 +1,5 @@
 "use strict";
+const fs = require("node:fs");
 const path = require("node:path");
 const express = require("express");
 const { config, assertReady } = require("./config");
@@ -75,6 +76,12 @@ app.post("/unsubscribe/undo", (req, res) => {
 });
 
 // ---------- Static app ----------
+// The page names its script and styles with this deploy's version, so a browser holding an older copy
+// of app.js or styles.css can never pair it with a newer page.
+const VERSION = String(Date.now());
+const indexHtml = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8").replace(/__VERSION__/g, VERSION);
+app.get(["/", "/index.html"], (req, res) => { res.setHeader("Cache-Control", "no-cache"); res.type("html").send(indexHtml); });
+
 // "no-cache" makes browsers check for a newer version on every load, so an update never pairs a new page with an old script.
 app.use(express.static(path.join(__dirname, "..", "public"), {
   index: "index.html",
