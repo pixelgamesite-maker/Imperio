@@ -20,7 +20,8 @@ const TYPES = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ppt: "application/vnd.ms-powerpoint",
   pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  csv: "text/csv", txt: "text/plain"
+  csv: "text/csv", txt: "text/plain",
+  zip: "application/zip"
 };
 
 db.exec(`
@@ -57,7 +58,7 @@ function cleanName(name) {
 function save(name, buffer) {
   const filename = cleanName(name);
   const ext = (filename.split(".").pop() || "").toLowerCase();
-  if (!TYPES[ext] || !filename.includes(".")) throw new Error("That file type can't be attached. Use PDF, an image, Word, Excel, PowerPoint, CSV or text.");
+  if (!TYPES[ext] || !filename.includes(".")) throw new Error("That file type can't be attached. Use PDF, an image, Word, Excel, PowerPoint, CSV, text or ZIP. RAR files aren't accepted by the email service, so save them as ZIP.");
   if (!buffer.length) throw new Error("That file is empty.");
   if (buffer.length > MAX_TOTAL_BYTES) throw new Error("Files can be up to 5 MB.");
   const id = crypto.randomBytes(16).toString("hex");
