@@ -1,6 +1,6 @@
 /* Layout: sidebar on wide screens, bottom tab bar on phones; compose is a two-column desk with the recipient tally as the one bold element. */
 :root {
-  --strip-h: 32px; /* mockup banner height; 0 in the real app */
+  --strip-h: 0px;
   --paper: #eef1f5;
   --surface: #ffffff;
   --sunken: #f6f8fa;

@@ -1,7 +1,7 @@
 """Build one self-contained mockup page (dist/mockup.html) from public/ for sharing."""
 import re, pathlib
 root = pathlib.Path(__file__).resolve().parent.parent
-pub = root / "public"
+pub = root / "mockup"
 html = (pub / "index.html").read_text()
 css = (pub / "styles.css").read_text()
 js = (pub / "app.js").read_text()

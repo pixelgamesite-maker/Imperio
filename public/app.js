@@ -1,53 +1,12 @@
-/* Imperio Mailer front-end mockup.
-   Everything here runs on sample data. In step 2 the SAMPLE blocks are replaced by calls to the server API. */
+/* Imperio Mailer front-end. Talks to the server's /api routes. */
 (function () {
   "use strict";
 
-  // ---------- Sample data (replaced by the API later) ----------
-  var SUPPRESSED = ["kemi.lawal@gmail.com", "info@oldsupplier.com.ng", "seun.ojo@yahoo.com"];
-  var SAMPLE_RECIPIENTS = [
-    "adaeze.okafor@gmail.com, Adaeze",
-    "tunde@bakerandsons.ng, Tunde",
-    "chioma.eze@yahoo.com, Chioma",
-    "ifeanyi.nwosu@outlook.com",
-    "musa.bello@hotmail.com, Musa",
-    "Adaeze.Okafor@gmail.com, Adaeze",
-    "bola.adeyemi@gmail, Bola",
-    "kemi.lawal@gmail.com, Kemi",
-    "procurement@lekkiresorts.com, Lekki Resorts",
-    "ngozi.obi@gmail.com, Ngozi",
-    "yusuf.danjuma@yahoo.com, Yusuf",
-    "femi.akande@gmail.com, Femi",
-    "orders@ikejamart.ng",
-    "tunde@bakerandsons.ng",
-    "halima.sani@gmail.com, Halima"
-  ].join("\n");
-
-  var HISTORY = [
-    { id: "b5", date: "Today, 13:12", subject: "{name}, our October price list is here", sent: 0, failed: 0, skipped: 3, total: 214, status: "sending" },
-    { id: "b4", date: "24 Oct, 09:40", subject: "Closed on Friday for the public holiday", sent: 186, failed: 4, skipped: 2, total: 192, status: "done" },
-    { id: "b3", date: "10 Oct, 10:05", subject: "{name}, new delivery areas in Lekki and Ajah", sent: 179, failed: 1, skipped: 1, total: 181, status: "done" },
-    { id: "b2", date: "26 Sep, 16:30", subject: "September price list", sent: 120, failed: 0, skipped: 0, total: 160, status: "cancelled" }
-  ];
-  var FAIL_REASONS = [
-    "Mailbox does not exist (550)",
-    "Recipient's mailbox is full (452)",
-    "Domain has no mail server",
-    "Rejected by recipient's server (554)"
-  ];
-  var FIRST = ["Adaeze", "Tunde", "Chioma", "Musa", "Ngozi", "Yusuf", "Femi", "Halima", "Ibrahim", "Kelechi", "Zainab", "Obinna", "Funke", "Emeka", "Aisha", "Segun"];
-  var LAST = ["okafor", "bello", "eze", "obi", "danjuma", "akande", "sani", "nwosu", "adeyemi", "lawal", "ojo", "uche"];
-  var DOMAINS = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com"];
-
-  function fakeRecipient(i) {
-    var f = FIRST[i % FIRST.length], l = LAST[(i * 7) % LAST.length];
-    return { email: f.toLowerCase() + "." + l + (i > 40 ? i : "") + "@" + DOMAINS[i % DOMAINS.length], name: f };
-  }
-
   // ---------- Helpers ----------
   function $(id) { return document.getElementById(id); }
-  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  function fmt(n) { return Number(n).toLocaleString("en-NG"); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function fmt(n) { return Number(n || 0).toLocaleString("en-NG"); }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
   function storeGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
   function storeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage unavailable */ } }
 
@@ -56,7 +15,7 @@
     var t = $("toast");
     t.textContent = msg; t.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, 2600);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 3200);
   }
 
   function duration(seconds) {
@@ -67,72 +26,217 @@
     return h + " h" + (r ? " " + r + " min" : "");
   }
 
+  function when(ts) {
+    var d = new Date(ts), now = new Date();
+    var time = pad(d.getHours()) + ":" + pad(d.getMinutes());
+    if (d.toDateString() === now.toDateString()) return "Today, " + time;
+    var y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return "Yesterday, " + time;
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + ", " + time;
+  }
+
+  // ---------- API ----------
+  function api(method, path, body) {
+    var opts = { method: method, credentials: "same-origin", headers: {} };
+    if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+    return fetch("/api" + path, opts).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (res.status === 401 && path !== "/login") { showLogin(); }
+        if (!res.ok) { var err = new Error(data.error || "Request failed (" + res.status + ")."); err.status = res.status; throw err; }
+        return data;
+      });
+    }, function () { throw new Error("Can't reach the server. Check your connection and try again."); });
+  }
+
+  // ---------- State ----------
+  var me = null;
+  var settings = null;
+  var queueData = null;
+  var check = { ready: 0, duplicate: [], invalid: [], suppressed: [], sample: [] };
+
   // ---------- Router ----------
   var VIEWS = ["compose", "queue", "history", "config"];
-  var SOLO = ["login", "unsubscribe"];
+  function currentView() { var h = (location.hash || "").replace("#", ""); return VIEWS.indexOf(h) === -1 ? "compose" : h; }
   function route() {
-    var h = (location.hash || "").replace("#", "") || "compose";
-    var solo = SOLO.indexOf(h) !== -1;
-    if (!solo && VIEWS.indexOf(h) === -1) h = "compose";
-    document.querySelectorAll("[data-solo]").forEach(function (el) { el.hidden = el.getAttribute("data-solo") !== h; });
-    $("shell").hidden = solo;
+    if (!me) return;
+    var h = currentView();
     document.querySelectorAll("[data-view]").forEach(function (el) { el.hidden = el.getAttribute("data-view") !== h; });
     document.querySelectorAll("[data-nav]").forEach(function (a) {
       if (a.getAttribute("data-nav") === h) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
+    if (h === "queue") loadQueue();
+    if (h === "history") loadHistory();
+    if (h === "config") loadSettings(true);
+    schedulePoll();
     window.scrollTo(0, 0);
   }
   window.addEventListener("hashchange", route);
 
-  // ---------- Settings values ----------
-  function settings() {
+  // ---------- Sign in ----------
+  function showLogin() {
+    me = null;
+    clearTimeout(pollTimer);
+    $("shell").hidden = true;
+    document.querySelector('[data-solo="login"]').hidden = false;
+    setTimeout(function () { ($("loginEmail").value ? $("loginPass") : $("loginEmail")).focus(); }, 0);
+  }
+
+  function applyBrand(info) {
+    document.title = info.appName;
+    document.querySelectorAll(".js-app-name").forEach(function (el) { el.textContent = info.appName; });
+    document.querySelectorAll(".js-brand-mark").forEach(function (el) { el.textContent = (info.brandName || "M").charAt(0).toUpperCase(); });
+    document.querySelectorAll(".js-host").forEach(function (el) { el.textContent = location.host; });
+  }
+
+  function boot() {
+    api("GET", "/me").then(function (info) {
+      me = info;
+      applyBrand(info);
+      $("adminEmail").textContent = info.email || "";
+      document.querySelector('[data-solo="login"]').hidden = true;
+      $("shell").hidden = false;
+      return loadSettings(false);
+    }).then(function () {
+      if (!me) return;
+      fillComposeDefaults();
+      runCheck();
+      route();
+      loadQueue();
+    }).catch(function (err) {
+      if (err.status !== 401) {
+        applyBrand({ appName: "Mailer", brandName: "M" });
+        showLogin();
+        showLoginError(err.message);
+      }
+    });
+  }
+
+  function showLoginError(msg) { $("loginError").textContent = msg; $("loginError").hidden = !msg; }
+
+  $("loginForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var email = $("loginEmail").value.trim(), pass = $("loginPass").value;
+    if (!email || !pass) { showLoginError("Enter your email and password."); return; }
+    $("loginBtn").disabled = true;
+    api("POST", "/login", { email: email, password: pass }).then(function () {
+      $("loginPass").value = ""; showLoginError(""); boot();
+    }, function (err) { showLoginError(err.message); }).then(function () { $("loginBtn").disabled = false; });
+  });
+
+  $("logoutBtn").addEventListener("click", function () {
+    api("POST", "/logout", {}).then(showLogin, showLogin);
+  });
+
+  // ---------- Settings ----------
+  function loadSettings(fillForm) {
+    return api("GET", "/settings").then(function (data) {
+      settings = data.settings;
+      updateSideMeter();
+      if (fillForm) fillSettingsForm(data);
+      return data;
+    });
+  }
+
+  function fillSettingsForm(data) {
+    var s = data.settings;
+    $("sFromName").value = s.fromName; $("sFromEmail").value = s.fromEmail;
+    $("dailyLimit").value = s.dailyLimit; $("delay").value = s.delaySeconds;
+    $("batchSize").value = s.batchSize; $("batchPause").value = s.batchPauseMinutes; $("startHour").value = s.startHour;
+    $("signature").value = s.signature; $("unsubText").value = s.unsubscribeText; $("footerAddress").value = s.footerAddress;
+    var m = data.smtp;
+    $("smtpFacts").innerHTML = "<dt>Server</dt><dd>" + esc(m.host) + "</dd><dt>Port</dt><dd>" + esc(m.port) + (m.secure ? " (SSL)" : " (STARTTLS)") + "</dd>" +
+      "<dt>Username</dt><dd>" + esc(m.user) + "</dd><dt>Password</dt><dd>" + (m.passwordSet ? "Saved in .env" : '<span style="color:var(--bad)">Missing from .env</span>') + "</dd>";
+    $("supUnsub").textContent = fmt(data.suppressions.unsubscribed) + " unsubscribed";
+    $("supBounced").textContent = fmt(data.suppressions.bounced) + " bounced";
+    $("settingsError").hidden = true;
+    updateSpeedCalc();
+  }
+
+  function formSettings() {
     return {
-      daily: Math.max(1, parseInt($("dailyLimit").value, 10) || 200),
-      delay: Math.max(1, parseInt($("delay").value, 10) || 4),
-      batch: Math.max(1, parseInt($("batchSize").value, 10) || 50),
-      pause: Math.max(0, parseInt($("batchPause").value, 10) || 0),
-      signature: $("signature").value,
-      unsub: $("unsubText").value
+      fromName: $("sFromName").value, fromEmail: $("sFromEmail").value,
+      dailyLimit: $("dailyLimit").value, delaySeconds: $("delay").value, batchSize: $("batchSize").value,
+      batchPauseMinutes: $("batchPause").value, startHour: $("startHour").value,
+      signature: $("signature").value, unsubscribeText: $("unsubText").value, footerAddress: $("footerAddress").value
     };
   }
-  function sendSeconds(n) {
-    var s = settings();
-    return n * s.delay + Math.floor(Math.max(0, n - 1) / s.batch) * s.pause * 60;
+
+  function sendSeconds(n, s) {
+    s = s || settings;
+    if (!s || n <= 0) return 0;
+    return n * s.delaySeconds + Math.floor(Math.max(0, n - 1) / s.batchSize) * s.batchPauseMinutes * 60;
   }
+
   function updateSpeedCalc() {
-    var s = settings();
-    var day = s.daily;
-    $("speedCalc").innerHTML = "At this speed, " + fmt(day) + " emails take about <b>" + duration(sendSeconds(day)) + "</b>. A list of 1,000 would take <b>" + Math.ceil(1000 / s.daily) + " day" + (Math.ceil(1000 / s.daily) > 1 ? "s" : "") + "</b>.";
+    var f = formSettings();
+    var s = { dailyLimit: parseInt(f.dailyLimit, 10) || 1, delaySeconds: parseInt(f.delaySeconds, 10) || 1, batchSize: parseInt(f.batchSize, 10) || 1, batchPauseMinutes: parseInt(f.batchPauseMinutes, 10) || 0 };
+    $("speedCalc").innerHTML = "At this speed, a full day of " + fmt(s.dailyLimit) + " emails takes about <b>" + duration(sendSeconds(s.dailyLimit, s)) +
+      "</b>, at most " + fmt(Math.round(3600 / s.delaySeconds)) + " an hour.";
   }
+  ["dailyLimit", "delay", "batchSize", "batchPause"].forEach(function (id) { $(id).addEventListener("input", updateSpeedCalc); });
 
-  // ---------- Compose: recipient parsing ----------
-  var EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[a-z]{2,}$/i;
-  var parsed = { ready: [], dup: [], bad: [], sup: [] };
+  $("saveSettings").addEventListener("click", function () {
+    var b = $("saveSettings"); b.disabled = true;
+    api("PUT", "/settings", formSettings()).then(function (data) {
+      settings = data.settings; updateSideMeter(); $("settingsError").hidden = true; toast("Settings saved");
+    }, function (err) { $("settingsError").textContent = err.message; $("settingsError").hidden = false; })
+      .then(function () { b.disabled = false; });
+  });
 
-  function parseRecipients(text) {
-    var out = { ready: [], dup: [], bad: [], sup: [] };
-    var seen = {};
-    var sup = {};
-    SUPPRESSED.forEach(function (e) { sup[e] = true; });
-    text.split(/\r?\n/).forEach(function (raw, i) {
-      var line = raw.trim();
-      if (!line) return;
-      var parts = line.split(/[,;\t]/);
-      var email = parts[0].trim().replace(/^<|>$/g, "");
-      var name = parts.slice(1).join(" ").trim();
-      var key = email.toLowerCase();
-      var entry = { email: email, name: name, line: i + 1 };
-      if (!EMAIL_RE.test(email)) out.bad.push(entry);
-      else if (seen[key]) out.dup.push(entry);
-      else if (sup[key]) { seen[key] = true; out.sup.push(entry); }
-      else { seen[key] = true; out.ready.push(entry); }
-    });
-    return out;
+  $("testConn").addEventListener("click", function () {
+    var b = $("testConn"); b.disabled = true; b.textContent = "Testing…"; $("connOk").hidden = true; $("connError").hidden = true;
+    api("POST", "/smtp/test", {}).then(function () { $("connOk").hidden = false; }, function (err) { $("connError").textContent = err.message; $("connError").hidden = false; })
+      .then(function () { b.disabled = false; b.textContent = "Test connection"; });
+  });
+
+  $("viewSup").addEventListener("click", function () {
+    api("GET", "/suppressions?limit=500").then(function (data) {
+      var rows = data.suppressions;
+      openModal('<div class="modal-head"><h2>Do-not-email list</h2><button class="x" data-close aria-label="Close">×</button></div>' +
+        '<div class="modal-body">' + (rows.length ? '<div class="recip-list" id="supList">' + rows.map(function (r) {
+          return '<div><span class="addr">' + esc(r.email) + (r.detail && r.reason === "bounced" ? '<span class="why">' + esc(r.detail) + "</span>" : "") + '</span>' +
+            '<span class="btn-row" style="gap:6px;align-items:center"><span class="pill ' + (r.reason === "bounced" ? "pill-bad" : "pill-neutral") + '">' + (r.reason === "bounced" ? "Bounced" : "Unsubscribed") + '</span>' +
+            '<button class="btn btn-quiet" type="button" data-unsup="' + esc(r.email) + '">Remove</button></span></div>';
+        }).join("") + "</div>" : '<p class="hint">Nobody yet.</p>') +
+        '<p class="hint">Remove someone only if they asked to be added back.</p></div>' +
+        '<div class="modal-foot"><button class="btn" data-close>Close</button></div>', function (m) {
+        m.addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-unsup]");
+          if (!btn) return;
+          var email = btn.getAttribute("data-unsup");
+          api("DELETE", "/suppressions/" + encodeURIComponent(email)).then(function () {
+            btn.closest("div").remove(); toast(email + " removed from the list"); loadSettings(true);
+          }, function (err) { toast(err.message); });
+        });
+      });
+    }, function (err) { toast(err.message); });
+  });
+
+  // ---------- Compose ----------
+  function fillComposeDefaults() {
+    if (!$("fromName").value) $("fromName").value = storeGet("imperio-fromName", settings.fromName);
+    if (!$("fromAddr").value) $("fromAddr").value = storeGet("imperio-fromAddr", settings.fromEmail);
+    if (!$("subject").value) $("subject").value = storeGet("imperio-subject", "");
+    if (!$("body").value) $("body").value = storeGet("imperio-body", "");
+    if (!$("recips").value) $("recips").value = storeGet("imperio-recips", "");
+  }
+  [["fromName", "imperio-fromName"], ["fromAddr", "imperio-fromAddr"], ["subject", "imperio-subject"], ["body", "imperio-body"], ["recips", "imperio-recips"]].forEach(function (p) {
+    $(p[0]).addEventListener("input", function () { storeSet(p[1], $(p[0]).value); });
+  });
+
+  var checkTimer, checkSeq = 0;
+  $("recips").addEventListener("input", function () { clearTimeout(checkTimer); checkTimer = setTimeout(runCheck, 350); });
+
+  function runCheck() {
+    var seq = ++checkSeq;
+    api("POST", "/recipients/check", { text: $("recips").value }).then(function (data) {
+      if (seq !== checkSeq) return;
+      check = data; renderTally();
+    }, function () { /* keep the last result */ });
   }
 
   function renderTally() {
-    parsed = parseRecipients($("recips").value);
-    var r = parsed.ready.length, d = parsed.dup.length, b = parsed.bad.length, s = parsed.sup.length;
+    var r = check.ready, d = check.duplicate.length, b = check.invalid.length, s = check.suppressed.length;
     var total = r + d + b + s || 1;
     $("readyCount").textContent = fmt(r);
     $("sendLabel").textContent = "Send to " + fmt(r) + (r === 1 ? " person" : " people");
@@ -142,46 +246,51 @@
     $("barDup").style.width = (d / total * 100) + "%";
     $("barBad").style.width = (b / total * 100) + "%";
     $("barSup").style.width = (s / total * 100) + "%";
-
     var rows = [];
-    parsed.bad.forEach(function (e) { rows.push('<div class="issue"><span class="dot c-bad"></span><code>' + esc(e.email || "(blank)") + '</code><em>line ' + e.line + ', not a valid address</em></div>'); });
-    parsed.dup.forEach(function (e) { rows.push('<div class="issue"><span class="dot c-dup"></span><code>' + esc(e.email) + '</code><em>line ' + e.line + ', already listed</em></div>'); });
-    parsed.sup.forEach(function (e) { rows.push('<div class="issue"><span class="dot c-sup"></span><code>' + esc(e.email) + '</code><em>line ' + e.line + ', unsubscribed</em></div>'); });
+    check.invalid.slice(0, 100).forEach(function (e) { rows.push('<div class="issue"><span class="dot c-bad"></span><code>' + esc(e.email || "(blank)") + "</code><em>line " + e.line + ", not a valid address</em></div>"); });
+    check.duplicate.slice(0, 100).forEach(function (e) { rows.push('<div class="issue"><span class="dot c-dup"></span><code>' + esc(e.email) + "</code><em>line " + e.line + ", already listed</em></div>"); });
+    check.suppressed.slice(0, 100).forEach(function (e) { rows.push('<div class="issue"><span class="dot c-sup"></span><code>' + esc(e.email) + "</code><em>line " + e.line + ", on the do-not-email list</em></div>"); });
     $("issues").innerHTML = rows.join("");
     $("issues").hidden = rows.length === 0;
   }
 
-  function personalize(text, name) { return text.replace(/\{name\}/gi, name || "there"); }
+  $("insertName").addEventListener("click", function () {
+    var el = document.activeElement === $("subject") ? $("subject") : $("body");
+    var s = el.selectionStart != null ? el.selectionStart : el.value.length;
+    var e2 = el.selectionEnd != null ? el.selectionEnd : s;
+    el.value = el.value.slice(0, s) + "{name}" + el.value.slice(e2);
+    el.focus(); el.selectionStart = el.selectionEnd = s + 6;
+    el.dispatchEvent(new Event("input"));
+  });
+
+  function personalize(text, name) { return String(text).replace(/\{name\}/gi, name && name.trim() ? name.trim() : "there"); }
+
+  function message() {
+    return { fromName: $("fromName").value.trim(), fromEmail: $("fromAddr").value.trim(), subject: $("subject").value.trim(), body: $("body").value };
+  }
+
+  function messageProblem(m) {
+    if (!m.subject) return { field: "subject", text: "Add a subject before sending." };
+    if (!m.body.trim()) return { field: "body", text: "Write a message before sending." };
+    if (!m.fromEmail) return { field: "fromAddr", text: "Add a from address." };
+    return null;
+  }
 
   function emailPreviewHTML(r) {
-    var s = settings();
-    var unsub = s.unsub.trim();
-    var lastSpace = unsub.lastIndexOf(" ");
-    var unsubHTML = lastSpace > 0 ? esc(unsub.slice(0, lastSpace + 1)) + "<u>" + esc(unsub.slice(lastSpace + 1)) + "</u>" : "<u>" + esc(unsub) + "</u>";
+    var m = message(), s = settings;
+    var unsub = (s.unsubscribeText || "Unsubscribe").trim();
+    var i = unsub.lastIndexOf(" ");
+    var unsubHTML = i > 0 ? esc(unsub.slice(0, i + 1)) + "<u>" + esc(unsub.slice(i + 1)) + "</u>" : "<u>" + esc(unsub) + "</u>";
     return '<div class="mail">' +
-      '<div class="mail-meta"><div><span>From </span>' + esc($("fromName").value) + " &lt;" + esc($("fromAddr").value) + "&gt;</div>" +
+      '<div class="mail-meta"><div><span>From </span>' + esc(m.fromName) + " &lt;" + esc(m.fromEmail) + "&gt;</div>" +
       "<div><span>To </span>" + esc(r.name ? r.name + " <" + r.email + ">" : r.email) + "</div>" +
-      "<div><span>Subject </span><b>" + esc(personalize($("subject").value, r.name)) + "</b></div></div>" +
-      '<div class="mail-body">' + esc(personalize($("body").value, r.name)) + "\n\n" + esc(s.signature) + "</div>" +
-      '<div class="mail-foot">' + unsubHTML + "</div></div>";
+      "<div><span>Subject </span><b>" + esc(personalize(m.subject, r.name)) + "</b></div></div>" +
+      '<div class="mail-body">' + esc(personalize(m.body, r.name)) + (s.signature ? "\n\n" + esc(s.signature) : "") + "</div>" +
+      '<div class="mail-foot">' + unsubHTML + (s.footerAddress ? "<br>" + esc(s.footerAddress) : "") + "</div></div>";
   }
 
-  // ---------- Modals ----------
-  function openModal(html, onReady) {
-    var root = $("modalRoot");
-    root.innerHTML = '<div class="scrim" id="scrim"><div class="modal" role="dialog" aria-modal="true">' + html + "</div></div>";
-    var scrim = $("scrim");
-    scrim.addEventListener("click", function (e) { if (e.target === scrim || e.target.closest("[data-close]")) closeModal(); });
-    var first = scrim.querySelector("button, input, select, textarea");
-    if (first) first.focus();
-    if (onReady) onReady(scrim);
-  }
-  function closeModal() { $("modalRoot").innerHTML = ""; }
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
-
-  function openPreview() {
-    var list = parsed.ready.length ? parsed.ready : [{ email: $("fromAddr").value, name: "" }];
-    var idx = 0;
+  $("previewBtn").addEventListener("click", function () {
+    var list = check.sample && check.sample.length ? check.sample : [{ email: (me && me.email) || $("fromAddr").value, name: "" }];
     openModal(
       '<div class="modal-head"><h2>Preview</h2><button class="x" data-close aria-label="Close">×</button></div>' +
       '<div class="modal-body"><div class="field"><label for="pvWho">Show it as</label><select class="select" id="pvWho">' +
@@ -189,352 +298,269 @@
       '</select></div><div id="pvMail"></div></div>' +
       '<div class="modal-foot"><button class="btn" data-close>Close</button></div>',
       function (m) {
-        function draw() { m.querySelector("#pvMail").innerHTML = emailPreviewHTML(list[idx]); }
-        m.querySelector("#pvWho").addEventListener("change", function (e) { idx = +e.target.value; draw(); });
-        draw();
-      }
-    );
-  }
+        function draw(i) { m.querySelector("#pvMail").innerHTML = emailPreviewHTML(list[i]); }
+        m.querySelector("#pvWho").addEventListener("change", function (e) { draw(+e.target.value); });
+        draw(0);
+      });
+  });
 
-  function openConfirm() {
-    var s = settings();
-    var n = parsed.ready.length;
-    var leftToday = Math.max(0, s.daily - queue.usedToday);
+  $("testBtn").addEventListener("click", function () {
+    var m = message(), p = messageProblem(m);
+    if (p) { toast(p.text); $(p.field).focus(); return; }
+    var b = $("testBtn"); b.disabled = true; b.textContent = "Sending test…";
+    var first = check.sample && check.sample[0];
+    m.testName = first ? first.name : "";
+    api("POST", "/test-send", m).then(function (data) { toast("Test sent to " + data.to); loadQueue(); }, function (err) { toast(err.message); })
+      .then(function () { b.disabled = false; b.textContent = "Send test to myself"; });
+  });
+
+  $("sendBtn").addEventListener("click", function () {
+    var m = message(), p = messageProblem(m);
+    if (p) { toast(p.text); $(p.field).focus(); return; }
+    var n = check.ready;
+    var w = queueData ? queueData.worker : { usedToday: 0, dailyLimit: settings.dailyLimit };
+    var ahead = queueData ? [queueData.current].concat(queueData.queued || []).filter(Boolean).reduce(function (sum, b) { return sum + b.pending; }, 0) : 0;
+    var leftToday = Math.max(0, w.dailyLimit - w.usedToday - ahead);
     var today = Math.min(n, leftToday), later = n - today;
-    var skipped = parsed.dup.length + parsed.bad.length + parsed.sup.length;
+    var skipped = check.duplicate.length + check.invalid.length + check.suppressed.length;
     openModal(
-      '<div class="modal-head"><h2>Send to ' + fmt(n) + " people?</h2>" + '<button class="x" data-close aria-label="Close">×</button></div>' +
-      '<div class="modal-body">' +
-      '<dl class="facts">' +
-      "<dt>Subject</dt><dd>" + esc($("subject").value) + "</dd>" +
-      "<dt>From</dt><dd>" + esc($("fromAddr").value) + "</dd>" +
+      '<div class="modal-head"><h2>Send to ' + fmt(n) + (n === 1 ? " person?" : " people?") + '</h2><button class="x" data-close aria-label="Close">×</button></div>' +
+      '<div class="modal-body"><dl class="facts">' +
+      "<dt>Subject</dt><dd>" + esc(m.subject) + "</dd>" +
+      "<dt>From</dt><dd>" + esc(m.fromEmail) + "</dd>" +
       "<dt>Recipients</dt><dd>" + fmt(n) + (skipped ? ' <span class="hint">(' + fmt(skipped) + " left out)</span>" : "") + "</dd>" +
-      "<dt>Sent today</dt><dd>" + fmt(today) + " of them, about " + duration(sendSeconds(today)) + "</dd>" +
-      (later ? "<dt>Sent tomorrow</dt><dd>" + fmt(later) + " (your daily limit is " + fmt(s.daily) + ")</dd>" : "") +
+      "<dt>Sent today</dt><dd>" + fmt(today) + (today ? (sendSeconds(today) < 60 ? ", in under a minute" : ", over about " + duration(sendSeconds(today))) : "") + "</dd>" +
+      (later ? "<dt>Sent later</dt><dd>" + fmt(later) + " (daily limit " + fmt(w.dailyLimit) + ")</dd>" : "") +
       "</dl>" +
-      (later ? '<div class="callout callout-warn">' + fmt(queue.usedToday) + " emails have already gone out today, so the rest of this batch waits until tomorrow at 8:00.</div>" : "") +
-      '<p class="hint">You can pause or cancel from the Sending screen at any time. Emails already sent can\'t be recalled.</p>' +
-      "</div>" +
-      '<div class="modal-foot"><button class="btn" data-close>Go back</button><button class="btn btn-primary" id="confirmSend">Send ' + fmt(n) + " emails</button></div>",
-      function (m) {
-        m.querySelector("#confirmSend").addEventListener("click", function () {
-          closeModal();
-          startBatch($("subject").value, parsed.ready.slice(), skipped);
-          location.hash = "#queue";
-          toast("Batch started: " + fmt(n) + " emails queued");
+      (ahead ? '<div class="callout callout-warn">' + fmt(ahead) + " emails from earlier batches go out first.</div>" : "") +
+      (later ? '<div class="callout callout-warn">The rest continue automatically from ' + pad(settings.startHour) + ":00 on the following days.</div>" : "") +
+      '<p class="hint">You can pause or cancel from the Sending screen at any time. Emails already sent can\'t be recalled.</p></div>' +
+      '<div class="modal-foot"><button class="btn" data-close>Go back</button><button class="btn btn-primary" id="confirmSend">Send ' + fmt(n) + (n === 1 ? " email" : " emails") + "</button></div>",
+      function (modal) {
+        modal.querySelector("#confirmSend").addEventListener("click", function (e) {
+          e.target.disabled = true;
+          api("POST", "/batches", { subject: m.subject, body: m.body, fromName: m.fromName, fromEmail: m.fromEmail, recipients: $("recips").value })
+            .then(function (data) {
+              closeModal();
+              $("recips").value = ""; storeSet("imperio-recips", ""); runCheck();
+              toast("Batch started: " + fmt(data.batch.total) + " emails queued");
+              location.hash = "#queue";
+            }, function (err) { e.target.disabled = false; toast(err.message); });
         });
-      }
-    );
+      });
+  });
+
+  // ---------- Modals ----------
+  function openModal(html, onReady) {
+    var root = $("modalRoot");
+    root.innerHTML = '<div class="scrim" id="scrim"><div class="modal" role="dialog" aria-modal="true">' + html + "</div></div>";
+    var scrim = $("scrim");
+    scrim.addEventListener("click", function (e) { if (e.target === scrim || e.target.closest("[data-close]")) closeModal(); });
+    var first = scrim.querySelector("select, input, textarea, .modal-foot .btn-primary, button");
+    if (first) first.focus();
+    if (onReady) onReady(scrim);
+  }
+  function closeModal() { $("modalRoot").innerHTML = ""; }
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+
+  // ---------- Queue ----------
+  var pollTimer;
+  function schedulePoll() {
+    clearTimeout(pollTimer);
+    if (!me) return;
+    var fast = currentView() === "queue" && !document.hidden;
+    pollTimer = setTimeout(function () { loadQueue().then(schedulePoll, schedulePoll); }, fast ? 3000 : 30000);
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && me) { loadQueue(); schedulePoll(); } });
+
+  function loadQueue() {
+    if (!me) return Promise.resolve();
+    return api("GET", "/queue").then(function (data) { queueData = data; renderQueue(); updateSideMeter(); });
   }
 
-  // ---------- Queue simulation ----------
-  var queue = {
-    subject: HISTORY[0].subject,
-    recipients: [],
-    sent: 132, failed: 3, total: 214, skipped: 3,
-    usedToday: 132,
-    state: "sending",
-    log: [],
-    started: "today at 13:12",
-    timer: null
-  };
-  for (var i = 0; i < 214; i++) queue.recipients.push(fakeRecipient(i));
-
-  // seed log with recent results
-  (function seedLog() {
-    var t = new Date(Date.now() - 4000);
-    for (var j = 0; j < 8; j++) {
-      var r = queue.recipients[queue.sent - 1 - j];
-      var fail = j === 3;
-      queue.log.push({ time: new Date(t.getTime() - j * 4000), email: r.email, ok: !fail, why: fail ? FAIL_REASONS[0] : "" });
-    }
-  })();
-
-  function startBatch(subject, recips, skipped) {
-    clearInterval(queue.timer);
-    HISTORY.forEach(function (h) { if (h.status === "sending" || h.status === "paused" || h.status === "waiting") { h.status = "cancelled"; h.sent = queue.sent; h.failed = queue.failed; } });
-    queue.subject = subject;
-    queue.recipients = recips.length ? recips : [fakeRecipient(0)];
-    queue.total = queue.recipients.length;
-    queue.sent = 0; queue.failed = 0; queue.skipped = skipped;
-    queue.state = "sending";
-    queue.log = [];
-    var now = new Date();
-    queue.started = "today at " + pad(now.getHours()) + ":" + pad(now.getMinutes());
-    HISTORY.unshift({ id: "b" + Date.now(), date: "Today, " + pad(now.getHours()) + ":" + pad(now.getMinutes()), subject: subject, sent: 0, failed: 0, skipped: skipped, total: queue.total, status: "sending" });
-    tick(); run();
-  }
-  function pad(n) { return (n < 10 ? "0" : "") + n; }
-
-  function run() {
-    clearInterval(queue.timer);
-    queue.timer = setInterval(tick, 900);
+  function updateSideMeter() {
+    if (!settings) return;
+    var used = queueData ? queueData.worker.usedToday : 0;
+    $("usedToday").textContent = fmt(used);
+    $("dailyLimitLabel").textContent = fmt(settings.dailyLimit);
+    $("usedMeter").style.width = Math.min(100, used / settings.dailyLimit * 100) + "%";
+    var active = queueData ? (queueData.current ? 1 : 0) + queueData.queued.length : 0;
+    $("navBadge").textContent = active; $("navBadge").hidden = !active;
   }
 
-  function tick() {
-    if (queue.state !== "sending") { renderQueue(); return; }
-    var done = queue.sent + queue.failed;
-    var s = settings();
-    if (done >= queue.total) { queue.state = "done"; clearInterval(queue.timer); syncHistory(); renderQueue(); return; }
-    if (queue.usedToday >= s.daily) { queue.state = "waiting"; clearInterval(queue.timer); syncHistory(); renderQueue(); return; }
-    var r = queue.recipients[done];
-    var fail = (done * 37) % 61 === 5;
-    if (fail) queue.failed++; else queue.sent++;
-    queue.usedToday++;
-    queue.log.unshift({ time: new Date(), email: r.email, ok: !fail, why: fail ? FAIL_REASONS[done % FAIL_REASONS.length] : "" });
-    if (queue.log.length > 60) queue.log.pop();
-    syncHistory();
-    renderQueue();
+  function batchState(b, w) {
+    if (b.status === "paused") return ["Paused", "pill-warn"];
+    if (b.status === "cancelled") return ["Cancelled", "pill-neutral"];
+    if (b.status === "done") return ["Finished", "pill-good"];
+    if (w.phase === "waiting-limit") return ["Continues tomorrow", "pill-warn"];
+    if (w.phase === "waiting-morning") return ["Starts at " + pad(w.startHour) + ":00", "pill-warn"];
+    if (w.phase === "backoff") return ["Retrying soon", "pill-bad"];
+    if (w.phase === "break") return ["Short break", "pill-accent"];
+    return ["Sending", "pill-accent"];
   }
-
-  function syncHistory() {
-    var h = HISTORY[0];
-    h.sent = queue.sent; h.failed = queue.failed;
-    h.status = queue.state === "done" ? "done" : queue.state === "cancelled" ? "cancelled" : queue.state === "waiting" ? "waiting" : queue.state === "paused" ? "paused" : "sending";
-    if (!$("historyBody").closest("[hidden]")) renderHistory();
-  }
-
-  var STATE_LABEL = {
-    sending: ["Sending", "pill-accent"],
-    paused: ["Paused", "pill-warn"],
-    waiting: ["Continues tomorrow", "pill-warn"],
-    done: ["Finished", "pill-good"],
-    cancelled: ["Cancelled", "pill-neutral"]
-  };
 
   function renderQueue() {
-    var s = settings();
-    var done = queue.sent + queue.failed;
-    var pending = Math.max(0, queue.total - done);
-    var leftToday = Math.max(0, s.daily - queue.usedToday);
-    var tomorrow = queue.state === "cancelled" ? 0 : Math.max(0, pending - leftToday);
-    $("qSubject").textContent = queue.subject;
-    $("qMeta").textContent = "Started " + queue.started + ". " + fmt(queue.total) + " recipients, " + fmt(queue.skipped) + " left out.";
-    var lbl = STATE_LABEL[queue.state];
-    $("qState").textContent = lbl[0]; $("qState").className = "pill " + lbl[1];
-    $("pSent").style.width = (queue.sent / queue.total * 100) + "%";
-    $("pFail").style.width = (queue.failed / queue.total * 100) + "%";
-    $("sSent").textContent = fmt(queue.sent);
-    $("sFail").textContent = fmt(queue.failed);
-    $("sPend").textContent = fmt(queue.state === "cancelled" ? 0 : pending);
-    $("sTomorrow").textContent = fmt(tomorrow);
+    var d = queueData, w = d.worker, s = settings;
+    $("queueRule").textContent = "One email every " + (s.delaySeconds === 1 ? "second" : s.delaySeconds + " seconds") + ", up to " + fmt(s.dailyLimit) + " a day, from " + pad(s.startHour) + ":00. Anything left over continues the next day.";
 
-    var eta;
-    if (queue.state === "done") eta = "All done. " + fmt(queue.sent) + " delivered to the mail server, " + fmt(queue.failed) + " failed.";
-    else if (queue.state === "cancelled") eta = "Cancelled. " + fmt(pending) + " emails were not sent.";
-    else if (queue.state === "waiting") eta = "Daily limit reached. The remaining " + fmt(pending) + " go out tomorrow from 8:00.";
-    else if (queue.state === "paused") eta = "Paused at " + fmt(done) + " of " + fmt(queue.total) + ". Nothing is sending.";
-    else eta = fmt(done) + " of " + fmt(queue.total) + " done. About " + duration(sendSeconds(Math.min(pending, leftToday))) + " left today" + (tomorrow ? ", then " + fmt(tomorrow) + " tomorrow." : ".");
-    $("qEta").textContent = eta;
+    var err = w.lastError;
+    if (err && (w.phase === "backoff")) {
+      var mins = Math.max(1, Math.ceil((w.nextAt - d.now) / 60000));
+      $("workerError").textContent = (err.kind === "auth" ? "The mail server rejected the login. Check SMTP_USER and SMTP_PASS in .env, then restart the app." :
+        err.kind === "throttled" ? "The mail server asked us to slow down." : "Couldn't reach the mail server.") +
+        " Trying again in " + mins + " min. (" + err.message + ")";
+      $("workerError").hidden = false;
+    } else $("workerError").hidden = true;
 
-    var finished = queue.state === "done" || queue.state === "cancelled";
-    $("pauseBtn").textContent = queue.state === "paused" ? "Resume" : "Pause";
-    $("pauseBtn").disabled = finished || queue.state === "waiting";
-    $("cancelBtn").disabled = finished;
+    var b = d.current || d.latest;
+    $("queueEmpty").hidden = !!d.current;
+    $("queueEmptyText").textContent = d.latest ? "Nothing is sending right now. Your last batch is below." : "Nothing is sending right now.";
+    $("queuePanel").hidden = !b;
+    if (b) {
+      var done = b.sent + b.failed + b.skipped;
+      var total = b.total || 1;
+      var used = w.usedToday;
+      var leftToday = Math.max(0, w.dailyLimit - used);
+      var tomorrow = b.status === "sending" || b.status === "paused" ? Math.max(0, b.pending - leftToday) : 0;
+      var st = batchState(b, w);
+      $("qSubject").textContent = b.subject;
+      $("qMeta").textContent = "Started " + when(b.createdAt).replace(/^Today/, "today").replace(/^Yesterday/, "yesterday") + ". " + fmt(b.total) + " recipients" + (b.skippedAtStart ? ", " + fmt(b.skippedAtStart) + " left out" : "") + ".";
+      $("qState").textContent = st[0]; $("qState").className = "pill " + st[1];
+      $("pSent").style.width = (b.sent / total * 100) + "%";
+      $("pFail").style.width = (b.failed / total * 100) + "%";
+      $("sSent").textContent = fmt(b.sent); $("sFail").textContent = fmt(b.failed);
+      $("sPend").textContent = fmt(b.pending); $("sTomorrow").textContent = fmt(tomorrow);
+      var eta;
+      if (b.status === "done") eta = "All done. " + fmt(b.sent) + " handed to the mail server, " + fmt(b.failed) + " failed" + (b.skipped ? ", " + fmt(b.skipped) + " skipped because they unsubscribed" : "") + ".";
+      else if (b.status === "cancelled") eta = "Cancelled. " + fmt(b.cancelled) + " emails were not sent.";
+      else if (b.status === "paused") eta = "Paused at " + fmt(done) + " of " + fmt(b.total) + ". Nothing is sending.";
+      else if (w.phase === "waiting-limit") eta = "Today's limit is used up. The remaining " + fmt(b.pending) + " continue tomorrow from " + pad(w.startHour) + ":00.";
+      else if (w.phase === "waiting-morning") eta = "Sending starts at " + pad(w.startHour) + ":00.";
+      else {
+        var today = Math.min(b.pending, leftToday);
+        var secs = sendSeconds(today);
+        eta = fmt(done) + " of " + fmt(b.total) + " done. " + (secs < 60 ? "Less than a minute" : "About " + duration(secs)) + " left today" + (tomorrow ? ", then " + fmt(tomorrow) + " on the following days." : ".");
+      }
+      $("qEta").textContent = eta;
+      var finished = b.status === "done" || b.status === "cancelled";
+      $("pauseBtn").textContent = b.status === "paused" ? "Resume" : "Pause";
+      $("pauseBtn").hidden = finished; $("cancelBtn").hidden = finished;
+      $("pauseBtn").setAttribute("data-id", b.id); $("cancelBtn").setAttribute("data-id", b.id);
+    }
 
-    var active = queue.state === "sending" || queue.state === "paused" || queue.state === "waiting";
-    $("navBadge").hidden = !active;
-    $("usedToday").textContent = fmt(queue.usedToday);
-    $("usedMeter").style.width = Math.min(100, queue.usedToday / s.daily * 100) + "%";
+    $("queuedPanel").hidden = !d.queued.length;
+    $("queuedList").innerHTML = d.queued.map(function (q) {
+      return '<div><span class="addr">' + esc(q.subject) + '<span class="why">' + fmt(q.pending) + " waiting, added " + esc(when(q.createdAt)) + "</span></span>" +
+        '<span class="pill ' + (q.status === "paused" ? "pill-warn" : "pill-neutral") + '">' + (q.status === "paused" ? "Paused" : "Queued") + "</span></div>";
+    }).join("");
 
-    $("log").innerHTML = queue.log.length ? queue.log.map(function (l) {
-      return "<li><time>" + pad(l.time.getHours()) + ":" + pad(l.time.getMinutes()) + ":" + pad(l.time.getSeconds()) + "</time>" +
-        '<span class="addr">' + esc(l.email) + (l.why ? '<span class="why">' + esc(l.why) + "</span>" : "") + "</span>" +
-        (l.ok ? '<span class="pill pill-good">Sent</span>' : '<span class="pill pill-bad">Failed</span>') + "</li>";
-    }).join("") : '<li style="display:block"><div class="empty">Results show up here as each email goes out.</div></li>';
+    $("logPanel").hidden = !d.log.length;
+    $("log").innerHTML = d.log.map(function (l) {
+      var t = new Date(l.attempted_at);
+      var pill = l.status === "sent" ? '<span class="pill pill-good">Sent</span>' : l.status === "failed" ? '<span class="pill pill-bad">Failed</span>' : '<span class="pill pill-neutral">Skipped</span>';
+      return "<li><time>" + pad(t.getHours()) + ":" + pad(t.getMinutes()) + ":" + pad(t.getSeconds()) + "</time>" +
+        '<span class="addr">' + esc(l.email) + (l.error && l.status !== "sent" ? '<span class="why">' + esc(l.error) + "</span>" : "") + "</span>" + pill + "</li>";
+    }).join("");
   }
+
+  $("pauseBtn").addEventListener("click", function () {
+    var id = this.getAttribute("data-id"), resume = this.textContent === "Resume";
+    api("POST", "/batches/" + id + (resume ? "/resume" : "/pause"), {}).then(function () { toast(resume ? "Sending resumed" : "Sending paused"); loadQueue(); }, function (err) { toast(err.message); });
+  });
+
+  $("cancelBtn").addEventListener("click", function () {
+    var id = this.getAttribute("data-id");
+    var b = queueData && queueData.current;
+    openModal('<div class="modal-head"><h2>Cancel this batch?</h2><button class="x" data-close aria-label="Close">×</button></div>' +
+      '<div class="modal-body"><p>The ' + fmt(b ? b.pending : 0) + " emails that haven't gone out yet won't be sent. The " + fmt(b ? b.sent : 0) + " already sent stay sent.</p></div>" +
+      '<div class="modal-foot"><button class="btn" data-close>Keep sending</button><button class="btn btn-primary" id="doCancel">Cancel batch</button></div>',
+      function (m) {
+        m.querySelector("#doCancel").addEventListener("click", function () {
+          api("POST", "/batches/" + id + "/cancel", {}).then(function () { closeModal(); toast("Batch cancelled"); loadQueue(); }, function (err) { toast(err.message); });
+        });
+      });
+  });
 
   // ---------- History ----------
-  var openBatch = null;
-  var batchFilter = "all";
+  var historyRows = [];
+  var openBatch = null, batchFilter = "all", openDetail = null;
 
-  function batchRecipients(h) {
-    var list = [];
-    for (var i = 0; i < h.total; i++) {
-      var r = (h.id === HISTORY[0].id ? queue.recipients[i] : null) || fakeRecipient(i + h.id.length * 13);
-      var status, why = "";
-      if (i < h.failed) { status = "failed"; why = FAIL_REASONS[i % FAIL_REASONS.length]; }
-      else if (i < h.failed + h.sent) status = "sent";
-      else status = h.status === "cancelled" ? "cancelled" : "waiting";
-      list.push({ email: r.email, status: status, why: why });
-    }
-    return list;
+  var HSTATUS = { sending: ["Sending", "pill-accent"], paused: ["Paused", "pill-warn"], done: ["Finished", "pill-good"], cancelled: ["Cancelled", "pill-neutral"] };
+  var RSTATUS = { sent: ["Sent", "pill-good"], failed: ["Failed", "pill-bad"], pending: ["Waiting", "pill-neutral"], skipped: ["Skipped", "pill-neutral"], cancelled: ["Not sent", "pill-neutral"] };
+
+  function loadHistory() {
+    return api("GET", "/batches").then(function (data) {
+      historyRows = data.batches;
+      if (openBatch) return loadDetail(); renderHistory();
+    }, function (err) { toast(err.message); });
   }
 
-  var HSTATUS = {
-    sending: ["Sending", "pill-accent"], paused: ["Paused", "pill-warn"], waiting: ["Continues tomorrow", "pill-warn"],
-    done: ["Finished", "pill-good"], cancelled: ["Cancelled", "pill-neutral"]
-  };
-  var RSTATUS = { sent: ["Sent", "pill-good"], failed: ["Failed", "pill-bad"], waiting: ["Waiting", "pill-neutral"], cancelled: ["Not sent", "pill-neutral"] };
+  function loadDetail() {
+    return api("GET", "/batches/" + openBatch + "?status=" + batchFilter + "&limit=500").then(function (data) { openDetail = data; renderHistory(); });
+  }
 
   function renderHistory() {
-    var body = $("historyBody");
-    body.innerHTML = HISTORY.map(function (h) {
-      var st = HSTATUS[h.status];
+    $("historyEmpty").hidden = historyRows.length > 0;
+    $("historyBody").innerHTML = historyRows.map(function (h) {
+      var st = HSTATUS[h.status] || [h.status, "pill-neutral"];
       var open = openBatch === h.id;
       var row = '<tr class="batch" tabindex="0" data-batch="' + h.id + '" aria-expanded="' + open + '">' +
-        '<td class="num" style="white-space:nowrap">' + esc(h.date) + "</td>" +
-        '<td style="min-width:200px">' + esc(h.subject) + '<div class="hint num">' + fmt(h.total) + " recipients</div></td>" +
+        '<td class="num" style="white-space:nowrap">' + esc(when(h.createdAt)) + "</td>" +
+        '<td style="min-width:200px">' + esc(h.subject) + '<div class="hint num">' + fmt(h.total) + " recipients" + (h.retryOf ? ", retry of an earlier batch" : "") + "</div></td>" +
         '<td class="n">' + fmt(h.sent) + "</td>" +
         '<td class="n">' + (h.failed ? '<span style="color:var(--bad)">' + fmt(h.failed) + "</span>" : "0") + "</td>" +
-        '<td class="n hide-sm">' + fmt(h.skipped) + "</td>" +
+        '<td class="n hide-sm">' + fmt(h.skippedAtStart + h.skipped) + "</td>" +
         '<td class="hide-sm"><span class="pill ' + st[1] + '">' + st[0] + "</span></td></tr>";
       if (!open) return row;
-      var recips = batchRecipients(h);
-      var shown = recips.filter(function (r) { return batchFilter === "all" || r.status === batchFilter; });
-      var failedCount = recips.filter(function (r) { return r.status === "failed"; }).length;
+      var recips = openDetail && openDetail.batch.id === h.id ? openDetail.recipients : [];
       return row + '<tr class="detail"><td colspan="6"><div class="detail-inner">' +
         '<div class="btn-row" style="justify-content:space-between;align-items:center">' +
         '<div class="seg" role="group" aria-label="Filter recipients">' +
-        ["all", "sent", "failed"].map(function (f) { return '<button type="button" data-filter="' + f + '" aria-pressed="' + (batchFilter === f) + '">' + (f === "all" ? "All" : f === "sent" ? "Sent" : "Failed") + "</button>"; }).join("") +
-        "</div>" +
-        '<div class="btn-row">' +
-        '<button class="btn" type="button" data-copy-failed="' + h.id + '"' + (failedCount ? "" : " disabled") + ">Copy failed addresses</button>" +
-        '<button class="btn" type="button" data-retry="' + h.id + '"' + (failedCount ? "" : " disabled") + ">Retry " + fmt(failedCount) + " failed</button>" +
+        [["all", "All"], ["sent", "Sent"], ["failed", "Failed"], ["pending", "Waiting"]].map(function (f) { return '<button type="button" data-filter="' + f[0] + '" aria-pressed="' + (batchFilter === f[0]) + '">' + f[1] + "</button>"; }).join("") +
+        "</div><div class=\"btn-row\">" +
+        (h.failed ? '<a class="btn" href="/api/batches/' + h.id + '/failed.csv" download>Download failed (CSV)</a>' : "") +
+        '<button class="btn" type="button" data-retry="' + h.id + '"' + (h.failed ? "" : " disabled") + ">Retry " + fmt(h.failed) + " failed</button>" +
         "</div></div>" +
-        '<div class="recip-list">' + (shown.length ? shown.slice(0, 200).map(function (r) {
-          var s = RSTATUS[r.status];
-          return '<div><span class="addr">' + esc(r.email) + (r.why ? '<span class="why">' + esc(r.why) + "</span>" : "") + '</span><span class="pill ' + s[1] + '">' + s[0] + "</span></div>";
-        }).join("") : '<div><span class="hint">No recipients with this status.</span></div>') + "</div>" +
+        '<div class="recip-list">' + (recips.length ? recips.map(function (r) {
+          var s = RSTATUS[r.status] || [r.status, "pill-neutral"];
+          return '<div><span class="addr">' + esc(r.name ? r.email + " (" + r.name + ")" : r.email) + (r.error ? '<span class="why">' + esc(r.error) + "</span>" : "") + '</span><span class="pill ' + s[1] + '">' + s[0] + "</span></div>";
+        }).join("") : '<div><span class="hint">' + (openDetail ? "No recipients with this status." : "Loading…") + "</span></div>") + "</div>" +
+        (recips.length === 500 ? '<p class="hint">Showing the first 500. Download the CSV for the full failed list.</p>' : "") +
         "</div></td></tr>";
     }).join("");
   }
 
   $("historyBody").addEventListener("click", function (e) {
     var f = e.target.closest("[data-filter]");
-    if (f) { batchFilter = f.getAttribute("data-filter"); renderHistory(); return; }
-    var c = e.target.closest("[data-copy-failed]");
-    if (c) {
-      var h = HISTORY.filter(function (x) { return x.id === c.getAttribute("data-copy-failed"); })[0];
-      var text = batchRecipients(h).filter(function (r) { return r.status === "failed"; }).map(function (r) { return r.email; }).join("\n");
-      copyText(text, "Failed addresses copied");
-      return;
-    }
+    if (f) { batchFilter = f.getAttribute("data-filter"); loadDetail(); return; }
+    if (e.target.closest("a[download]")) return;
     var rt = e.target.closest("[data-retry]");
     if (rt) {
-      var hb = HISTORY.filter(function (x) { return x.id === rt.getAttribute("data-retry"); })[0];
-      var failed = batchRecipients(hb).filter(function (r) { return r.status === "failed"; }).map(function (r) { return { email: r.email, name: "" }; });
-      openModal(
-        '<div class="modal-head"><h2>Retry ' + fmt(failed.length) + " failed emails?</h2><button class=\"x\" data-close aria-label=\"Close\">×</button></div>" +
-        '<div class="modal-body"><p>They\'ll be sent again with the same subject and message. Addresses that don\'t exist will fail again and be added to the do-not-email list.</p></div>' +
-        '<div class="modal-foot"><button class="btn" data-close>Go back</button><button class="btn btn-primary" id="doRetry">Retry ' + fmt(failed.length) + " emails</button></div>",
+      var id = +rt.getAttribute("data-retry");
+      var h = historyRows.filter(function (x) { return x.id === id; })[0];
+      openModal('<div class="modal-head"><h2>Retry ' + fmt(h.failed) + ' failed emails?</h2><button class="x" data-close aria-label="Close">×</button></div>' +
+        '<div class="modal-body"><p>They go out again as a new batch, with the same subject and message. Addresses that bounced are on the do-not-email list and are left out.</p></div>' +
+        '<div class="modal-foot"><button class="btn" data-close>Go back</button><button class="btn btn-primary" id="doRetry">Retry failed emails</button></div>',
         function (m) {
           m.querySelector("#doRetry").addEventListener("click", function () {
-            closeModal();
-            startBatch(hb.subject, failed, 0);
-            location.hash = "#queue";
-            toast("Retry started: " + fmt(failed.length) + " emails queued");
+            api("POST", "/batches/" + id + "/retry", {}).then(function (data) {
+              closeModal(); toast("Retry started: " + fmt(data.batch.total) + " emails queued"); location.hash = "#queue";
+            }, function (err) { closeModal(); toast(err.message); });
           });
         });
       return;
     }
     var row = e.target.closest("tr.batch");
-    if (row) { var id = row.getAttribute("data-batch"); openBatch = openBatch === id ? null : id; batchFilter = "all"; renderHistory(); }
+    if (row) {
+      var bid = +row.getAttribute("data-batch");
+      if (openBatch === bid) { openBatch = null; openDetail = null; renderHistory(); return; }
+      openBatch = bid; batchFilter = "all"; openDetail = null; renderHistory(); loadDetail();
+    }
   });
   $("historyBody").addEventListener("keydown", function (e) {
     var row = e.target.closest("tr.batch");
-    if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); row.click(); }
+    if (row && e.target === row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); row.click(); }
   });
 
-  function copyText(text, msg) {
-    try {
-      navigator.clipboard.writeText(text).then(function () { toast(msg); }, function () { showCopyFallback(text); });
-    } catch (err) { showCopyFallback(text); }
-  }
-  function showCopyFallback(text) {
-    openModal('<div class="modal-head"><h2>Copy these addresses</h2><button class="x" data-close aria-label="Close">×</button></div>' +
-      '<div class="modal-body"><textarea class="textarea mono-ish" id="copyBox" rows="8" readonly>' + esc(text) + "</textarea></div>" +
-      '<div class="modal-foot"><button class="btn" data-close>Done</button></div>', function (m) { var t = m.querySelector("#copyBox"); t.focus(); t.select(); });
-  }
-
-  // ---------- Wiring ----------
-  function wire() {
-    // Login
-    $("loginForm").addEventListener("submit", function (e) {
-      e.preventDefault();
-      if (!$("loginPass").value) { $("loginError").hidden = false; $("loginPass").focus(); return; }
-      $("loginError").hidden = true;
-      location.hash = "#compose";
-    });
-
-    // Unsubscribe
-    $("unsubBtn").addEventListener("click", function () { $("unsubAsk").hidden = true; $("unsubDone").hidden = false; });
-    $("resubBtn").addEventListener("click", function () { $("unsubAsk").hidden = false; $("unsubDone").hidden = true; toast("You're still on the list"); });
-
-    // Compose
-    var draft = storeGet("imperio-recips", null);
-    $("recips").value = draft !== null ? draft : SAMPLE_RECIPIENTS;
-    $("recips").addEventListener("input", function () { renderTally(); storeSet("imperio-recips", $("recips").value); });
-    $("insertName").addEventListener("click", function () {
-      var el = document.activeElement === $("subject") ? $("subject") : $("body");
-      var s = el.selectionStart != null ? el.selectionStart : el.value.length;
-      var e2 = el.selectionEnd != null ? el.selectionEnd : s;
-      el.value = el.value.slice(0, s) + "{name}" + el.value.slice(e2);
-      el.focus(); el.selectionStart = el.selectionEnd = s + 6;
-    });
-    $("previewBtn").addEventListener("click", openPreview);
-    $("testBtn").addEventListener("click", function () { toast("Test sent to admin@placornat.com"); });
-    $("sendBtn").addEventListener("click", function () {
-      if (!$("subject").value.trim()) { toast("Add a subject before sending"); $("subject").focus(); return; }
-      openConfirm();
-    });
-
-    // Queue
-    $("pauseBtn").addEventListener("click", function () {
-      if (queue.state === "paused") { queue.state = "sending"; run(); toast("Sending resumed"); }
-      else { queue.state = "paused"; toast("Sending paused"); }
-      syncHistory(); renderQueue();
-    });
-    $("cancelBtn").addEventListener("click", function () {
-      var pending = queue.total - queue.sent - queue.failed;
-      openModal('<div class="modal-head"><h2>Cancel this batch?</h2><button class="x" data-close aria-label="Close">×</button></div>' +
-        '<div class="modal-body"><p>The ' + fmt(pending) + " emails that haven't gone out yet won't be sent. The " + fmt(queue.sent) + " already sent stay sent.</p></div>" +
-        '<div class="modal-foot"><button class="btn" data-close>Keep sending</button><button class="btn btn-primary" id="doCancel">Cancel batch</button></div>',
-        function (m) {
-          m.querySelector("#doCancel").addEventListener("click", function () {
-            closeModal(); queue.state = "cancelled"; clearInterval(queue.timer); syncHistory(); renderQueue(); toast("Batch cancelled");
-          });
-        });
-    });
-
-    // Settings
-    var PRESETS = {
-      // [server, port, suggested daily limit, suggested seconds between emails]
-      zoho: ["smtppro.zoho.com", "465", "200", "30"],
-      godaddy: ["smtpout.secureserver.net", "465", "450", "10"],
-      brevo: ["smtp-relay.brevo.com", "587", "500", "4"],
-      ses: ["email-smtp.eu-west-1.amazonaws.com", "587", "500", "4"],
-      custom: ["", "587", "200", "10"]
-    };
-    $("smtpPreset").addEventListener("change", function (e) {
-      var p = PRESETS[e.target.value];
-      $("smtpHost").value = p[0]; $("smtpPort").value = p[1];
-      $("dailyLimit").value = p[2]; $("delay").value = p[3];
-      $("connOk").hidden = true;
-      updateSpeedCalc(); renderQueue();
-      toast("Daily limit and speed set for " + e.target.selectedOptions[0].textContent);
-    });
-    $("testConn").addEventListener("click", function () {
-      var b = $("testConn"); b.disabled = true; b.textContent = "Testing…";
-      setTimeout(function () { b.disabled = false; b.textContent = "Test connection"; $("connOk").hidden = false; }, 900);
-    });
-    ["dailyLimit", "delay", "batchSize", "batchPause"].forEach(function (id) { $(id).addEventListener("input", function () { updateSpeedCalc(); renderQueue(); }); });
-    $("saveSettings").addEventListener("click", function () { toast("Settings saved"); });
-    $("viewSup").addEventListener("click", function () {
-      openModal('<div class="modal-head"><h2>Do-not-email list</h2><button class="x" data-close aria-label="Close">×</button></div>' +
-        '<div class="modal-body"><div class="recip-list">' +
-        SUPPRESSED.map(function (e) { return '<div><span class="addr">' + esc(e) + '</span><span class="pill pill-neutral">Unsubscribed</span></div>'; }).join("") +
-        '<div><span class="addr">dayo@closedbiz.ng<span class="why">Mailbox does not exist (550)</span></span><span class="pill pill-bad">Bounced</span></div>' +
-        '</div><p class="hint">Showing 4 of 36. Remove someone only if they asked to be added back.</p></div>' +
-        '<div class="modal-foot"><button class="btn" data-close>Close</button></div>');
-    });
-  }
-
-  wire();
-  renderTally();
-  updateSpeedCalc();
-  renderQueue();
-  renderHistory();
-  run();
-  route();
+  boot();
 })();

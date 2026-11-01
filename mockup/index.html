@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Placornat Mailer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,700&family=Public+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="mock-strip" id="mockStrip">
+  <span>Mockup with sample data. Nothing is sent.</span>
+  <a href="#login">Sign-in page</a>
+  <a href="#unsubscribe">Unsubscribe page</a>
+  <a href="#compose">Back to the app</a>
+</div>
+
+<!-- Sign in -->
+<div class="solo" data-solo="login" hidden>
+  <div class="solo-card">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">P</div>
+      <div><div class="brand-name">Placornat Mailer</div><div class="brand-sub">bulk.placornat.com</div></div>
+    </div>
+    <form class="panel" id="loginForm" novalidate>
+      <h1>Sign in</h1>
+      <div class="field">
+        <label for="loginEmail">Email</label>
+        <input class="input" id="loginEmail" type="email" autocomplete="username" value="admin@placornat.com">
+      </div>
+      <div class="field">
+        <label for="loginPass">Password</label>
+        <input class="input" id="loginPass" type="password" autocomplete="current-password" placeholder="Your password">
+      </div>
+      <p class="error" id="loginError" hidden>Enter your password to sign in.</p>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+    </form>
+    <p class="solo-foot">Only the account owner can sign in. After 5 wrong passwords, sign-in pauses for 15 minutes.</p>
+  </div>
+</div>
+
+<!-- Unsubscribe (public) -->
+<div class="solo" data-solo="unsubscribe" hidden>
+  <div class="solo-card">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">P</div>
+      <div class="brand-name">Placornat</div>
+    </div>
+    <div class="panel" id="unsubAsk">
+      <h1>Stop emails from Placornat?</h1>
+      <p>We'll stop sending newsletters to <b>adaeze.okafor@gmail.com</b>.</p>
+      <button class="btn btn-primary" id="unsubBtn" type="button">Unsubscribe</button>
+    </div>
+    <div class="panel" id="unsubDone" hidden>
+      <div class="unsub-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <h1>You're unsubscribed</h1>
+      <p><b>adaeze.okafor@gmail.com</b> won't get any more newsletters from Placornat.</p>
+      <button class="btn" id="resubBtn" type="button">I clicked by mistake, keep me on the list</button>
+    </div>
+    <p class="solo-foot">Placornat, Lagos, Nigeria</p>
+  </div>
+</div>
+
+<!-- App -->
+<div class="shell" id="shell" hidden>
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">P</div>
+      <div><div class="brand-name">Placornat Mailer</div><div class="brand-sub">admin@placornat.com</div></div>
+    </div>
+    <nav class="nav" aria-label="Main">
+      <a href="#compose" data-nav="compose">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>
+        Compose
+      </a>
+      <a href="#queue" data-nav="queue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>
+        Sending <span class="badge num" id="navBadge">1</span>
+      </a>
+      <a href="#history" data-nav="history">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+        History
+      </a>
+      <a href="#config" data-nav="config">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+        Settings
+      </a>
+    </nav>
+    <div class="side-foot">
+      <div class="num"><b id="usedToday">132</b> of 450 sent today</div>
+      <div class="meter"><i id="usedMeter" style="width:29%"></i></div>
+      <a href="#login" class="btn-quiet" style="padding:0">Sign out</a>
+    </div>
+  </aside>
+
+  <main>
+    <!-- Compose -->
+    <section class="page" data-view="compose" hidden>
+      <div class="page-head">
+        <div>
+          <h1>New email</h1>
+          <p>Write it once. Everyone gets their own copy, and nobody sees the other addresses.</p>
+        </div>
+      </div>
+
+      <div class="compose">
+        <div class="panel">
+          <div class="panel-pad stack">
+            <div class="row">
+              <div class="field">
+                <label for="fromName">From name</label>
+                <input class="input" id="fromName" value="Placornat">
+              </div>
+              <div class="field">
+                <label for="fromAddr">From address</label>
+                <input class="input" id="fromAddr" value="news@placornat.com">
+              </div>
+            </div>
+            <div class="field">
+              <label for="subject">Subject</label>
+              <input class="input" id="subject" value="{name}, our November price list is here">
+            </div>
+            <div class="field">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                <label for="body">Message</label>
+                <button class="chip-btn" type="button" id="insertName">Insert {name}</button>
+              </div>
+              <textarea class="textarea" id="body" rows="11">Hello {name},
+
+Our November price list is ready, and prices on most items stay the same as October.
+
+New this month:
+- Same-day delivery across Lagos Island for orders placed before 11am
+- 5% off orders above ₦250,000
+
+Reply to this email or call us on 0803 000 0000 to place an order.</textarea>
+              <p class="hint">If a recipient has no name, {name} becomes "there". Your signature and the unsubscribe line are added at the bottom.</p>
+            </div>
+          </div>
+          <div class="send-bar">
+            <div class="btn-row">
+              <button class="btn" type="button" id="testBtn">Send test to myself</button>
+              <button class="btn" type="button" id="previewBtn">Preview</button>
+            </div>
+            <button class="btn btn-primary" type="button" id="sendBtn"><span id="sendLabel">Send to 0 people</span></button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="tally">
+            <div class="tally-count"><strong id="readyCount">0</strong><span>ready to send</span></div>
+            <div class="tally-bar" aria-hidden="true">
+              <i class="c-ready" id="barReady"></i><i class="c-dup" id="barDup"></i><i class="c-bad" id="barBad"></i><i class="c-sup" id="barSup"></i>
+            </div>
+            <div class="tally-legend">
+              <div><span class="dot c-ready"></span>Ready<b id="lgReady">0</b></div>
+              <div><span class="dot c-dup"></span>Duplicates removed<b id="lgDup">0</b></div>
+              <div><span class="dot c-bad"></span>Invalid, removed<b id="lgBad">0</b></div>
+              <div><span class="dot c-sup"></span>Unsubscribed, skipped<b id="lgSup">0</b></div>
+            </div>
+          </div>
+          <div class="issues" id="issues"></div>
+          <div class="recip-box">
+            <label class="label" for="recips">Recipients</label>
+            <textarea class="textarea mono-ish" id="recips" rows="12" spellcheck="false"></textarea>
+            <p class="hint">One per line. Add a name after a comma to fill in {name}: <span class="num">ada@example.com, Ada</span></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sending queue -->
+    <section class="page" data-view="queue" hidden>
+      <div class="page-head">
+        <div>
+          <h1>Sending</h1>
+          <p>One email every 10 seconds, up to 450 a day. Anything left over goes out tomorrow from 8:00.</p>
+        </div>
+      </div>
+
+      <div class="panel" id="queuePanel">
+        <div class="panel-head">
+          <div style="min-width:0">
+            <h2 id="qSubject">{name}, our October price list is here</h2>
+            <p class="hint" id="qMeta">Started today at 13:12 · 214 recipients</p>
+          </div>
+          <span class="pill pill-accent" id="qState">Sending</span>
+        </div>
+        <div class="panel-pad stack">
+          <div class="progress" aria-hidden="true"><i class="c-ready" id="pSent"></i><i class="c-bad" id="pFail"></i></div>
+          <p class="hint num" id="qEta"></p>
+        </div>
+        <div class="stats">
+          <div class="stat"><b class="num" id="sSent">0</b><span><i class="dot c-ready"></i>Sent</span></div>
+          <div class="stat"><b class="num" id="sFail">0</b><span><i class="dot c-bad"></i>Failed</span></div>
+          <div class="stat"><b class="num" id="sPend">0</b><span><i class="dot c-sup"></i>Waiting</span></div>
+          <div class="stat"><b class="num" id="sTomorrow">0</b><span>Moved to tomorrow</span></div>
+        </div>
+        <div class="panel-pad btn-row" style="justify-content:space-between">
+          <div class="btn-row">
+            <button class="btn" type="button" id="pauseBtn">Pause</button>
+            <button class="btn btn-danger" type="button" id="cancelBtn">Cancel batch</button>
+          </div>
+          <a class="btn btn-quiet" href="#history">See all batches</a>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Latest results</h2></div>
+        <ul class="log" id="log"></ul>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section class="page" data-view="history" hidden>
+      <div class="page-head">
+        <div>
+          <h1>History</h1>
+          <p>Every batch you've sent. Open one to see each recipient and retry the ones that failed.</p>
+        </div>
+      </div>
+      <div class="panel table-wrap">
+        <table>
+          <thead>
+            <tr><th>Date</th><th>Subject</th><th class="n">Sent</th><th class="n">Failed</th><th class="n hide-sm">Skipped</th><th class="hide-sm">Status</th></tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="page" data-view="config" hidden>
+      <div class="page-head">
+        <div>
+          <h1>Settings</h1>
+          <p>How the mailer connects and how fast it sends.</p>
+        </div>
+        <button class="btn btn-primary" type="button" id="saveSettings">Save settings</button>
+      </div>
+
+      <div class="settings">
+        <div class="panel panel-pad">
+          <section>
+            <h2>Mail server (SMTP)</h2>
+            <p>From your email provider. To switch to Brevo or Amazon SES later, change these five fields.</p>
+            <div class="field">
+              <label for="smtpPreset">Provider</label>
+              <select class="select" id="smtpPreset">
+                <option value="godaddy">GoDaddy Professional Email</option>
+                <option value="zoho">Zoho Mail</option>
+                <option value="brevo">Brevo</option>
+                <option value="ses">Amazon SES</option>
+                <option value="custom">Other</option>
+              </select>
+            </div>
+            <div class="row">
+              <div class="field"><label for="smtpHost">Server</label><input class="input" id="smtpHost" value="smtpout.secureserver.net"></div>
+              <div class="field"><label for="smtpPort">Port</label><input class="input num" id="smtpPort" value="465" inputmode="numeric"></div>
+            </div>
+            <div class="field"><label for="smtpUser">Username</label><input class="input" id="smtpUser" value="news@placornat.com" autocomplete="off"></div>
+            <div class="field">
+              <label for="smtpPass">Password</label>
+              <input class="input" id="smtpPass" type="password" placeholder="Saved on the server. Type a new one to replace it." autocomplete="new-password">
+              <p class="hint">Stored in the server's config file, never shown again in this page.</p>
+            </div>
+            <div class="btn-row">
+              <button class="btn" type="button" id="testConn">Test connection</button>
+              <span class="pill pill-good" id="connOk" hidden>Connected</span>
+            </div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <div class="panel panel-pad">
+            <section>
+              <h2>Sending speed</h2>
+              <p>Choosing a provider fills in safe values. GoDaddy allows 500 a day over SMTP, so 450 leaves room for tests and retries.</p>
+              <div class="row">
+                <div class="field"><label for="dailyLimit">Daily limit</label><div class="suffix"><input class="input num" id="dailyLimit" value="450" inputmode="numeric"><span>emails</span></div></div>
+                <div class="field"><label for="delay">Wait between emails</label><div class="suffix"><input class="input num" id="delay" value="10" inputmode="numeric"><span>seconds</span></div></div>
+              </div>
+              <div class="row">
+                <div class="field"><label for="batchSize">Batch size</label><div class="suffix"><input class="input num" id="batchSize" value="50" inputmode="numeric"><span>then a pause</span></div></div>
+                <div class="field"><label for="batchPause">Pause after a batch</label><div class="suffix"><input class="input num" id="batchPause" value="5" inputmode="numeric"><span>minutes</span></div></div>
+              </div>
+              <div class="calc" id="speedCalc"></div>
+            </section>
+          </div>
+
+          <div class="panel panel-pad">
+            <section>
+              <h2>Added to every email</h2>
+              <div class="field"><label for="signature">Signature</label><textarea class="textarea" id="signature" rows="3">The Placornat team
+Lagos, Nigeria</textarea></div>
+              <div class="field"><label for="unsubText">Unsubscribe line</label><input class="input" id="unsubText" value="Don't want these emails? Unsubscribe"><p class="hint">The last word becomes the unsubscribe link.</p></div>
+            </section>
+          </div>
+
+          <div class="panel panel-pad">
+            <section>
+              <h2>Do-not-email list</h2>
+              <p>People who unsubscribed or whose address bounced. They're skipped in every batch.</p>
+              <div class="btn-row" style="align-items:center">
+                <span class="pill pill-neutral num">27 unsubscribed</span>
+                <span class="pill pill-neutral num">9 bounced</span>
+                <button class="btn btn-quiet" type="button" id="viewSup">View list</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="modalRoot"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

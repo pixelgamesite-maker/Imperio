@@ -1,0 +1,22 @@
+{
+  "name": "imperio",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Private bulk-email sender: one admin, one email, one copy per recipient, sent slowly over SMTP.",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "set-password": "node --disable-warning=ExperimentalWarning scripts/set-password.js",
+    "check-smtp": "node --disable-warning=ExperimentalWarning scripts/check-smtp.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "3.0.3",
+    "dotenv": "16.6.1",
+    "express": "5.1.0",
+    "nodemailer": "7.0.13"
+  }
+}
